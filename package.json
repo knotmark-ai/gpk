@@ -1,0 +1,21 @@
+{
+  "name": "gpk",
+  "version": "0.1.0",
+  "description": "A goal- and project-driven personal knowledge system for AI-assisted work.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build:adapters": "node scripts/build-platform-adapters.mjs",
+    "test:generated": "node scripts/check-generated-drift.mjs",
+    "test:skills": "node tests/skill-validation/run-test.mjs",
+    "test:platforms": "node tests/platform-compat/run-test.mjs",
+    "test:package": "node tests/plugin-package/run-test.mjs",
+    "test:clients": "node scripts/validate-client-packages.mjs",
+    "test": "npm run test:generated && npm run test:skills && npm run test:platforms && npm run test:package"
+  },
+  "files": [
+    "plugin/",
+    "adapters/codex/"
+  ],
+  "license": "MIT"
+}

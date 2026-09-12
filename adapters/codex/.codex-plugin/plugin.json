@@ -1,0 +1,36 @@
+{
+  "name": "gpk",
+  "version": "0.1.0",
+  "description": "GPK methodology and read-only knowledge assessment. Foundation for portable goal- and project-driven workflows.",
+  "author": {
+    "name": "Knotmark AI",
+    "url": "https://github.com/knotmark-ai"
+  },
+  "homepage": "https://github.com/knotmark-ai/gpk",
+  "repository": "https://github.com/knotmark-ai/gpk",
+  "license": "MIT",
+  "keywords": [
+    "goals",
+    "projects",
+    "knowledge-management",
+    "craft",
+    "agent-skill"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "GPK",
+    "shortDescription": "GPK methodology and read-only assessment",
+    "longDescription": "A portable goal- and project-driven knowledge method. This foundation explains GPK and assesses notes; knowledge-backend write workflows are not yet implemented.",
+    "developerName": "Knotmark AI",
+    "category": "Productivity",
+    "capabilities": [
+      "skills"
+    ],
+    "websiteURL": "https://github.com/knotmark-ai/gpk",
+    "brandColor": "#4F6F52",
+    "defaultPrompt": [
+      "Explain the GPK method.",
+      "Assess these notes using GPK without changing them."
+    ]
+  }
+}
