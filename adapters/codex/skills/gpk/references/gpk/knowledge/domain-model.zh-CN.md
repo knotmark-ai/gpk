@@ -28,6 +28,11 @@ Objective/KR 属于 Project，方向属于 Area；没有独立 Goal。人物、�
 Stage、长期父项目、Review、Ingest、Completion、Context、Recurrence 都不是必要实体。
 用户标签负责自定义检索分类，系统元数据负责类型、状态等领域语义，两者需区分。
 
+状态含义、存储方式和查询能力分开。每项状态只有一个权威表示，避免普通 Status 与
+状态标签各存一份。选用系统标签时优先 `#gpk/project/active` 这类命名，但不假定后端
+支持任意深度或标签筛选；原生字段、checkbox 也可承载状态。领域查询表达实体与状态，
+Adapter 负责映射到实际工具，并说明查询方式和覆盖范围。
+
 每个 Project 表达一个主要 Area，也可关联其他 Area；Task 最多有一个主要 Project。
 Source–Wiki、Wiki–Wiki、Project–Source/Wiki 可多对多。关联主要用文字和链接表达，
 不强制前驱字段或依赖 DAG；物理文件夹不决定领域归属，也不因多个 Area 复制项目。
@@ -88,6 +93,9 @@ paused、completed、canceled 项目下的执行任务，即使日期已到；�
 仅在缺失约束实质影响选择时询问。保留逾期、doing 和无日期工作的检索能力。
 Full Plan 可以展示完整状态、时间与关联；Upcoming、Waiting、Unscheduled 是视图。
 原生任务界面未必实现父状态筛选，需读取当前状态并说明限制。
+逐条读回搜索候选只验证候选本身，不证明没有遗漏。有限结果可以形成明确标注范围的
+Focus 候选，但不能据此断言已复盘全部承诺或不存在未完成任务；完整清单需要范围、
+遍历和当前状态读取的证据。
 
 Daily 处理捕获、行动、等待跟进与结果；Weekly 检查 KR、项目组合、容量和下一步承诺；
 Monthly 复盘 active Area 的方向、责任、项目与知识；新证据、约束、延期、日期、前期

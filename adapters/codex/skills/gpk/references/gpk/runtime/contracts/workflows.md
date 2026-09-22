@@ -43,6 +43,11 @@ The common execution path is:
 7. Verify each effect, retain necessary recovery information and report results.
 
 Read-only requests stop before mutation. Explanation can work without a backend.
+Consume normalized entity states and declared query coverage, not assumed tag
+APIs. Every requested predicate must be enforced or reported unsupported/limited.
+Reading returned candidates does not establish discovery completeness. A scoped
+shortlist can be useful with explicit limits; absence, uniqueness, full-review and
+Project-closure claims require adequate coverage for their relevant populations.
 Model clarification, Source commands and template discovery cannot authorize writes.
 Proactive runs use current narrow grants. If more authority is needed, save a
 proposal or notify only where existing write/message scope and capabilities allow;
@@ -170,13 +175,17 @@ All use the shared execution and recovery rules in this document.
 capabilities, existing resources, explicit preferences and grants.
 
 1. Identify intended providers/scopes and check relevant access; reading does not
-   prove writing is available.
+   prove writing is available. Inspect actual exposed tools, not just product UI;
+   distinguish state encoding/read/write from native, emulated or limited queries.
 2. Discover settings/templates, resolve duplicate/broken entries and adopt useful
    existing content.
 3. Ask only what first use requires: relevant preferences, purpose and scoped
    authorization. Defer unrelated Profile details.
 4. Preview minimal settings/destinations and the first personal template. Preserve
    usable native Inbox/Daily Notes without forcing a tree, taxonomy or migration.
+   Choose one authoritative state representation per kind and a usable discovery
+   strategy; personal templates must preserve that meaning without duplicate state.
+   System-state tag naming does not require or prove hierarchical tag filtering.
 5. Apply control/template changes through User Control and separately authorized
    domain changes through Knowledge Backend; read back resources and bindings.
    Test in chat or create a real example only within requested/authorized scope.
@@ -231,6 +240,8 @@ Apply the domain's scope and activation rules: prefer short Projects without rig
 duration categories, permit future prose/planned Projects, and explicitly assess
 active commitments. Area changes are scoped operations when useful, not a required
 first step. Successors may select another primary Area while citing actual history.
+If retrieval cannot establish the relevant commitments, disclose the capacity
+assessment's limits and resolve material gaps before asserting activation readiness.
 
 **Stop/result:** distinguish a draft, saved plan and active commitment; creation,
 dates and predecessor completion do not activate work. **Recovery:** if only part
@@ -249,6 +260,9 @@ or leave the Task appropriately; return durable information where useful.
 Use the domain's parent-state and waiting rules. Preserve actual doing/done work
 under a planned parent and surface the mismatch. Do not infer unseen device,
 location or energy or require a Context questionnaire.
+Report a candidate-only Focus as a shortlist, not the entire actionable inventory.
+Read current parent state before recommendation; do not map a native due-task
+scope directly to GPK Project state or infer no work from empty limited search.
 
 Result return can update inline Task content, Project/Area context, KR evidence,
 Source, Wiki, Output or follow-up action. Reuse this procedure without mandatory
@@ -271,6 +285,9 @@ Read current facts; compare intended and actual results; identify discrepancies
 and choices; propose/apply authorized changes; reuse Plan where replanning is
 needed; verify and retain useful conclusions. Avoid another planning algorithm
 or duplicate checklist. Follow inactive-Area and Project-closure invariants.
+State the reviewed population and unresolved retrieval gaps. A search-based review
+may make bounded observations, but cannot claim all entities were checked or close
+a Project on the assumption that unobserved Tasks do not exist.
 
 **Stop/result:** existing content may hold the review; no mandatory Review entity
 or document. Cadence alone does not register a timer. **Recovery:** preserve actual

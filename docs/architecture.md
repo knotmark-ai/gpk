@@ -53,6 +53,13 @@ generated packages are not competing databases. The
 [adapter contracts](../plugin/runtime/contracts/adapters.md) own the exact data
 ownership, capability declarations and public input/result types.
 
+State semantics belong to Domain; encoding and query execution belong to the
+Knowledge Backend adapter. A state tag can be readable/writable without a native
+tag-filter API. Skills request domain states and consume explicit query coverage;
+adapters may compose current reads and filtering, but cannot hide incomplete
+discovery behind a successful response or maintain a competing state database.
+The contract and provider mapping own the details, not a new tag-query subsystem.
+
 ## One authoritative body per subject
 
 English documents are authoritative. Chinese companions explain the same model

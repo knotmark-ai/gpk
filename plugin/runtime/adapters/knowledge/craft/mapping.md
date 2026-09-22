@@ -5,7 +5,9 @@ Documentation review: **2026-09-11**, against Craft's public MCP, API, and help
 pages. Live check: **2026-09-11**, through the Craft MCP connector
 available in Claude Code. Items marked *verified* were observed on a real space.
 One authorized single-block update was executed to test tag creation; every
-other observation is read-only. Nothing here enables a write workflow.
+other observation is read-only. A **2026-09-22 read-only MCP help check** reconfirmed
+the query surface below; it did not repeat the historical tag-write test.
+Nothing here enables a write workflow.
 
 The intended adapter maps GPK's Area, Project, Task, Source, Wiki, and Output
 model to Craft's available documents, blocks, tasks, links, and other native
@@ -38,16 +40,19 @@ operations; this document owns their Craft representation and evidence.
   material uses native child pages where supported; validate rendering and links.
 - Use a compact property list, one field per block, before Project Plan & Actions:
   for example Status, Repository, Area and optional Related Areas. Do not repeat
-  visible Type when context is clear. The adapter still needs a tested kind/state
-  convention independent of User Tags; no reliable kind-recovery implementation
-  is established by this layout alone. Do not depend solely on a tag index.
+  visible Type when context is clear. Proposed state encoding is one owned row,
+  e.g. `- Status: #gpk/project/active`; its tag is the value, not a duplicate of
+  another Status field. Separate System Metadata from User Tags. Kind/state
+  recovery still needs implementation and tests; layout alone does not establish
+  it, and this connector has no native tag index/filter API.
 - Keep Task actions concise; accompanying descriptions link actual review or
   execution materials through resolved native block links or verified external
   document/PR URLs. Do not show non-clickable local paths as review entry points
   or copy authoritative repository drafts into Craft merely to make them readable.
 - Tasks use native task blocks. Native todo/done/canceled map to domain states;
   doing/waiting use a reserved description marker. Surface and reconcile a native
-  terminal checkbox with stale metadata rather than resetting user edits.
+  terminal checkbox with stale metadata rather than resetting user edits. Do not
+  add duplicate terminal-state tags to native Task checkboxes.
 - The adjustable Task time maps to `scheduledDate`. Preserve an existing fixed
   deadline separately as a constraint; never reschedule it implicitly.
 - Resolve actual root/block references, preserve order and unrelated native
@@ -117,7 +122,8 @@ Tags are a documented product feature, separate from the API reference:
   section has an ignore list for hashtags that must not become tags.
 - Roadmap, not capability: Craft 3.6.0 (September 2026) says tag integration
   with Collections and Tasks will deepen and that block-based tag results are
-  "coming to Search later, too". Until that ships, search has no tag filter.
+  "coming to Search later, too". A product roadmap is not proof that the current
+  MCP connection exposes a tag filter; the dated help check below found none.
 - Tags are enabled per space and per member in Space Settings → Tags. In shared
   spaces they are off by default for members.
 - The Tags view lists every occurrence across documents, narrows results by
@@ -155,6 +161,57 @@ content are deliberately omitted.
 | Search latency | Immediately after the write, a global `search --regexp` for the new text returned nothing; the same query matched about ten seconds later. `blocks get` reflected the write at once |
 | Block model | Matches the REST reference: `type`, `textStyle`, `listStyle`, `markdown`, nested `content`; `block://` and `date://` links inside markdown |
 
+## State representation and query mapping (2026-09-22)
+
+The current MCP `--help` surface was inspected read-only. These observations are
+about exposed commands, not a claim that GPK's query implementation exists.
+
+| Command | Exposed query controls | Not established |
+|---|---|---|
+| `search` | Raw-text `--include`, RE2 `--regexp`, document/location/folder/date scope, cursor and fetched blocks | No native tag filter or tag vocabulary enumeration; no exhaustive domain inventory guarantee |
+| `documents list` | Folder (including subfolders), location/date bounds, metadata and cursor | No Project-state or tag predicate; nested entity-page coverage still requires the placement convention and block traversal |
+| `tasks list` | Native scopes such as active/upcoming/document/all | `active` means open and due by task date, not active Project; `all` is full-space only, not an extra permission grant |
+
+Prefer `#gpk/project/active` for a Project system-state tag and the corresponding
+kind/state name for another tagged entity, such as `#gpk/area/inactive`. Preserve
+the whole spelling across backends. Craft's documented hierarchy splits only at
+the first slash: `gpk` is the parent and `project/active` the child label, **not
+three-level hierarchy**. Do not assume recursive prefix or parent-tag filtering.
+See [Craft Tags](https://support.craft.do/en/organize-and-find/tags).
+
+Read state from the selected owned property/marker location, not any mention of
+its tag in prose, code, research or examples. Validate the kind and exact state;
+conflicting/multiple values are ambiguous, not permission to guess. Existing plain
+Status conventions can remain readable under an explicit legacy mapping until
+authorized migration; do not silently add another representation. Native Task
+terminal state takes precedence over a stale doing/waiting marker for read-only
+interpretation; report the mismatch, and repair only with authorization. Other
+contradictory encodings need clarification. Setup must verify tag rendering/settings
+before promising tag-chip navigation; literal text alone is not evidence of it.
+
+The domain query remains `query({ kinds: ["Project"], states: ["active"] })`:
+
+| Route | Intended composition | Capability and coverage |
+|---|---|---|
+| Scoped enumeration | Resolve the authorized entity population; page document listings and relevant nested blocks; read current owned state; filter in request memory | Emulated once implemented and validated. Complete only after adequate population/state coverage; disclose scope, failures and concurrency limits |
+| Text-search candidates | Search the known state spelling, page candidates, resolve owning entities, deduplicate and read current state before filtering | Degraded without additional completeness evidence. Fresh reads reject false positives but do not recover unindexed/missed documents; report partial/unknown coverage |
+| Native tag filtering | No matching parameter in this observed MCP surface | Unsupported; a clickable tag in the editor does not change this |
+
+The enumeration route must account for entities outside a presumed folder and
+native child pages according to the selected placement convention. Never broaden
+access without authorization. If the requested population cannot be bounded or
+fully reached, disclose that rather than treating the visible subset as complete.
+Budget exhaustion, unreadable content, invalid cursors and concurrent changes also
+limit coverage. Restart an invalid cursor only within the operation's bounds; no
+atomic scan guarantee is established. Neither route persists an adapter-owned
+index or state cache, changes status, or repairs user content as a side effect.
+
+Both composed routes are **designs awaiting implementation and acceptance**.
+A limited shortlist may help Focus; exhaustive reviews, absence claims and Project
+closure need sufficient coverage. An empty search result cannot prove that no
+active Projects exist. The [adapter contract](../../../contracts/adapters.md#state-representation-and-query-guarantees)
+defines predicate handling and result envelopes.
+
 ## Operation requirements to validate
 
 This table describes intended requirements, the documented primitive that could
@@ -163,7 +220,7 @@ of completed capability tests.
 
 | Operation | Required behavior | Documented primitive | Still to verify |
 |---|---|---|---|
-| Read and search | Inspect current backend records and actual connection scope | `GET /blocks`, `GET /documents`, `GET /documents/search`, `GET /connection` | Verified: the connector's tag filtering is plain-text matching and search paginates by cursor. Remaining: behavior of REST connections, which document a 20-result cap without pagination |
+| Read and search | Inspect current backend records and actual connection scope | `GET /blocks`, `GET /documents`, `GET /documents/search`, `GET /connection` | Observed MCP: raw-text search for tag spelling, not tag filtering; cursor pagination. Remaining: composed state queries, population coverage and separately configured REST behavior |
 | Create | Represent the applicable 0.4 entity and its meaningful relationships | `POST /documents`, `POST /blocks` with markdown or JSON, `POST /tasks` | Checkbox, heading, nested page, and link fidelity when rendered from a personalized template |
 | Update | Preserve document identity and unrelated user content | `PUT /blocks` updates only the supplied fields; `PUT /tasks` | The path for updating a document title through its root block; that a partial update leaves sibling blocks untouched |
 | Move | Prefer native moves that retain links and backlinks | `PUT /blocks/move`, `PUT /documents/move`, `PUT /folders/move` | That block and document IDs and `block://` references survive move and rename |
@@ -182,7 +239,7 @@ read-write round trip is recorded.
 | Decision | Documented basis | Assessment |
 |---|---|---|
 | Identity encoding | Document ID equals root block ID; every block has an ID; `block://` links; `GET /connection` deep-link templates. Verified: app and web link documentIds differ from rootBlockIds and must be resolved; the write response shows the block's internal `documentId` alongside its id; per-block `clickableLink` metadata is available | Stable references are available. Persistence across rename and move is undocumented and untested |
-| State encoding | Task state is only `active`, `done`, `cancelled`. Inline block-level tags exist as a product feature with no dedicated API parameter or field. Collections have select properties | Project states and Task `doing` / `waiting` must be emulated. Candidates are a reserved inline tag namespace such as `#gpk/...`, which is user-visible plain text and separable from User Tags by prefix; a Collection select property; or a documented in-document convention. Verified: tags are plain `#name` text in block markdown and searchable as text, so a reserved namespace is readable and retrievable through the connector. Verified by one write: `#name` text written through the connector becomes a real tag chip, hierarchical names included, and an existing chip survives a whole-block replacement. The route still depends on tags being enabled in the space, and its markdown representation carries no structure beyond the text |
+| State encoding | Task state is only `active`, `done`, `cancelled` in the REST reference. Inline tags have no dedicated API parameter or field; Collections have select properties | Current proposal: one owned Project/Area status row using `#gpk/<kind>/<state>`; native Task checkbox plus a reserved doing/waiting description marker. Older alternatives included Collection selects and plain in-document Status. The historical tag-write test establishes text/chip round-trip for one connection, not state-query completeness. Encoding recovery, conflicts, migration and both query routes still need implementation and acceptance; see the state mapping above |
 | One Task time | `scheduledDate` plus a separate `deadline` and `completedAt` | Good fit: GPK's adjustable time maps to `scheduledDate`; a fixed external constraint can use `deadline` |
 | Control-entry discovery | `GET /documents/search` with `include`, `regexps`, `folderIds`, `location`; native `templates` location | Marker plus regex search is feasible. Personal templates can live in Templates and get a stable ID. Keep the marker distinctive: the connector paginates search by cursor, but REST connections document a 20-result cap |
 | Concurrency and recovery | No revision, version, or ETag in the REST reference. `fetchMetadata` exposes `lastModifiedAt`. Verified: every write returns a new per-block `stamp` in `revertInfo.expectedStamps`, and `blocks_revert` refuses to revert a block changed since | No documented conditional update. The available guard is read `lastModifiedAt`, write, read back and compare, which is the weaker path described in [Mutation, verification and recovery](../../../contracts/workflows.md#6-mutation-verification-and-recovery). Whether an update can be conditioned on the stamp is the remaining test before settling this row |
@@ -210,13 +267,13 @@ read-write round trip is recorded.
 - Retrieval by tag is full-text search for the tag string, space-wide by
   default and combinable with folder, location, document, and date bounds.
   It is not a tag index: there is no tag enumeration, matches are text, the
-  index lags writes by seconds, and complete enumeration means paging through
-  every cursor. Declare that coverage.
+  index can lag writes, and exhausting its cursors proves only that the candidate
+  search ended. Fresh reads validate matches, not omissions; complete state-query
+  coverage requires the scoped enumeration evidence described above.
 - Tag hierarchy is one level, split at the first `/`. A deeper string such as
-  `#gpk/status/active` is still one valid chip, grouped under `gpk` with
-  `status/active` as the child label. Either `#gpk/project-active` or
-  `#gpk/project/active` works as a reserved name; choose one convention and
-  match it with an anchored regex.
+  `#gpk/project/active` is still one valid chip, grouped under `gpk` with
+  `project/active` as the child label. Prefer this kind/state spelling, but match
+  exact owned state content rather than assuming three-level tag queries.
 - Task state vocabulary differs by surface: `todo` / `done` / `canceled` in the
   connector's write commands, `active` / `done` / `cancelled` in the REST
   reference. The adapter must normalize to GPK's Task states.

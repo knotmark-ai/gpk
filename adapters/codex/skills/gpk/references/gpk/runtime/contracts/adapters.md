@@ -1,7 +1,7 @@
 # Adapter Contracts
 
 Status: **Target design, not executable interfaces or implemented workflows.**
-Updated: **2026-09-12**. This packaged reference defines the adapter contracts; signatures below remain design contracts unless explicitly marked implemented.
+Updated: **2026-09-22**. This packaged reference defines the adapter contracts; signatures below remain design contracts unless explicitly marked implemented.
 The [domain model](../../knowledge/domain-model.md) defines domain meaning;
 [workflow contracts](workflows.md) define shared execution and recovery.
 The signatures below describe a provider-neutral contract using TypeScript
@@ -161,6 +161,52 @@ the whole document from this projection. Operations may use richer typed content
 when the actual block API requires it. A partial read must state its coverage.
 State strings are validated against the kind and the transition table, not treated
 as arbitrary custom values. `patch` cannot bypass state/time or ownership invariants.
+
+### State representation and query guarantees
+
+`query({ kinds: ["Project"], states: ["active"] })` requests domain meaning, not
+`filterByTag`. A provider can represent that state with a native field, a reserved
+system tag or a documented content convention. Representation/read/write support
+does not establish native filtering, indexing or tag-hierarchy support. Select one
+authoritative encoding; templates cannot introduce a competing state value.
+
+- Enforce every supplied predicate, including scope, kind, state and Task time.
+  Multiple values within `kinds` or `states` are alternatives; different supplied
+  predicates are combined. Reject invalid combinations. Never silently drop a
+  filter or substitute a provider's differently defined `active` scope.
+- Declare capability per supported predicate, scope and retrieval strategy, not
+  merely `query: supported`. Native means the exposed tool fulfills the required
+  semantics; emulated means composition over current backend facts preserves them.
+  A limited candidate strategy is degraded; an unavailable strategy is unsupported.
+  Use existing `Capability`, `Result.limits` and coverage/error envelopes, not a
+  second query model or adapter-owned state database.
+- An exhaustive scoped route enumerates the relevant population, follows required
+  document/child pages, reads authoritative state and filters in request memory.
+  Declare the scope, traversal and concurrency limits. A folder alone establishes
+  completeness only if the selected placement convention covers the requested
+  population there; it does not establish logical ownership.
+- A search-candidate route reads current candidate content before applying all
+  predicates. This removes false positives but cannot recover index omissions.
+  Exhausting search cursors does not prove exhaustive domain coverage, especially
+  after recent writes. Declare partial/unknown coverage unless additional evidence
+  proves completeness for the requested scope.
+- `Page.coverage` describes discovery coverage for the requested scope, not merely
+  correctness of returned rows. With `next`, the result set is still partial;
+  exhausting continuation is necessary, not sufficient, for a complete inventory.
+  `Snapshot.coverage` describes that record's read coverage. Unreadable records,
+  scan budgets, invalid cursors and changes during traversal must remain explicit;
+  do not promise an atomic snapshot without backend support.
+- A verified exhaustive query may return an empty complete result. No matches in
+  limited search return partial/unknown coverage with limits, not proof of absence.
+  If the predicate cannot be evaluated at all, return a relevant failure rather
+  than unfiltered rows. Include unresolved records/conflicts in limits or failure
+  details, never silently exclude them while claiming complete coverage.
+
+Query emulation does not authorize writes, state migration or conflict repair.
+Read current facts each time; preserve native user edits and apply the documented
+encoding conflict rule or report ambiguity. UI filtering is not MCP/API evidence.
+
+### Content and effect boundaries
 
 Surface/content operations support raw captures and Project process material
 without pretending they are domain entities. Surface resolution is read-only;

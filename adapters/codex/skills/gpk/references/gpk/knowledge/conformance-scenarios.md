@@ -2,7 +2,7 @@
 
 Domain baseline: **0.4**. Package version: **0.1.0**.
 
-Status: **20 domain scenarios and 25 implementation cases specified, not executed;
+Status: **20 domain scenarios and 31 implementation cases specified, not executed;
 13 behavior coverage rows designed, not runtime-verified.**
 
 This is the sole acceptance inventory for the [domain model](domain-model.md),
@@ -378,7 +378,7 @@ evidence, and authorization—not identical Agent wording.
 
 ## Implementation acceptance
 
-All 25 cases below are **specified, not executed**. These supplement the detailed
+All 31 cases below are **specified, not executed**. These supplement the detailed
 domain scenarios without adding domain entities, active Skills or supported
 providers. Operations refer to semantic contracts, not identically named MCP APIs.
 
@@ -409,6 +409,12 @@ providers. Operations refer to semantic contracts, not identically named MCP API
 | C2 | Selected local control unavailable to another device | Report access limitations, without switching provider or creating fresh defaults; reject resource path escapes when a local provider exists. |
 | C3 | Explicit control provider transfer, including interrupted cutover | Verify resources, template links and locator; no dual authority, domain/secret copy, obsolete-grant revival or automatic deletion of prior resources; uncertain cutover stops dependent writes. |
 | C4 | Initial knowledge-backed control | Reuse Craft transport/access without inventing a domain entity; distinguish genuinely unset resources from inaccessible configured targets. |
+| Q1 | State tag/field/checkbox readable and writable, but no native state filter | Query kinds/states retain domain meaning; declare read/write representation separately from each query strategy. Do not infer native query support from tag chips or UI filtering. |
+| Q2 | State spelling in examples; recently changed or unindexed entity absent from search | Fresh reads remove false positives and obsolete matches; search omissions remain explicit. Exhausted search cursors cannot establish completeness, and zero candidates are not proof of absence. |
+| Q3 | Scoped inventory spans pages, child documents and unreadable or changing records | Traverse the placement-defined population and current owned states; handle cursors, scan budgets and access gaps. Only adequate coverage permits complete/empty claims; invalid cursors or concurrent edits do not become an atomic-snapshot promise. |
+| Q4 | Duplicate/conflicting state markers; native Task completed with stale waiting marker | Preserve direct edits, use one authoritative encoding and the documented conflict rule; report unresolved ambiguity. Read-only queries never repair state, add duplicate tags or reset the user's completed Task. |
+| Q5 | Same `#gpk/project/active` spelling on a deep-tag backend and Craft | Preserve domain meaning while declaring actual hierarchy depth. Craft's first-slash grouping does not become three-level or recursive-prefix filtering; no required `filterByTag` domain API. |
+| Q6 | Mixed kind/state/time/scope query; one predicate unsupported or retrieval budget exhausted | Enforce all predicates or return an explicit failure/limited result; never silently ignore one or map native due-task `active` to Project `active`. Emulation uses fresh backend facts and request memory, not an adapter-owned authoritative index. |
 
 C2/C3 become executable integration requirements when another control provider is
 implemented; they do not claim current local/cloud support.
@@ -425,7 +431,7 @@ Arrows indicate intended orchestration, not executable command chains.
 |---|---|---|---|
 | GTD capture/clarify: reimbursement reminder with receipt | Ingest; capture content or Task.create; Work when selected | Inbox pending clarification or standalone todo with receipt; actual submission result can remain inline, without forced entities | A1, I4, K6 |
 | GTD clarify/organize: workshop preparation with unclear outcome | Ingest → Plan; read Area/evidence, initialize Project, create/order/link Tasks | Bounded Objective, initial KRs and one plan; ask user-known facts, no mandatory Discovery Project or implicit activation | A2 |
-| GTD engage: “What should I do next?” | Work/Focus; query Tasks and read current parents, order and constraints | Small useful choice including doing, overdue and undated candidates; no inferred Context or full-backlog answer; usually no write | A5, A9, W1 |
+| GTD engage: “What should I do next?” | Work/Focus; query Tasks and read current parents, order and constraints | Small useful choice including doing, overdue and undated candidates; disclose limited discovery; no inferred Context or full-backlog answer; usually no write | A5, A9, W1, Q1–Q6 |
 | Waiting, postponement and uncommitted possibilities | Work/Review; wait, reschedule, resume or update capture/Area prose | Waiting reason and one time; moving time does not resolve a blocker; possibilities need no deferred state or commitment | A4 |
 | GTD reflect: weekly commitments drift after delays | Review → shared Plan; review/replan Project, update Task order/time | Preserve actual work/fixed constraints while adjusting shared capacity, scope or KRs; cadence alone creates no timer | A3 |
 | OKR: usable workflow instead of twelve articles read | Plan → Work → Review; initialize/activate, update evidence, explicitly close | Objective and outcome KRs inside Project; no Goal/KR entity, score engine, corporate cascade or requirement for every life action to serve KRs | A2, A6 |
@@ -480,8 +486,8 @@ do not themselves constitute execution of these scenarios.
 
 ## 中文摘要
 
-本文统一保存领域模型 v0.4 的 20 条领域场景、25 条模板/摄入/周期执行/操作/
-控制实现用例，以及 13 行方法与行为覆盖、三个组合验收路径。全部仍是
+本文统一保存领域模型 v0.4 的 20 条领域场景、31 条模板/摄入/周期执行/操作/
+控制/状态查询实现用例，以及 13 行方法与行为覆盖、三个组合验收路径。全部仍是
 “已定义，未执行”；五个业务 Skill 仍未启用，与软件包版本 0.1.0 不混用。
 验收关注实际状态、关系、证据、权限、控制存储和跨客户端恢复，不要求相同
 输出文字。文档、构建、模拟接口检查不等于真实场景通过；未来 Provider 的

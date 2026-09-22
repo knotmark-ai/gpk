@@ -4,6 +4,9 @@ All notable changes to GPK will be documented here.
 
 ## Unreleased
 
+- Separate authoritative state encoding from query capability; specify scoped
+  enumeration versus limited search, Craft's actual MCP/tag-hierarchy boundaries,
+  workflow coverage rules and six additional unexecuted query acceptance cases.
 - Clarified compact Project properties, action-first presentation and verified
   document/PR references for review Tasks across backend representations.
 

@@ -61,6 +61,15 @@ encodes domain meaning such as type and status. A tag encoding Project state is
 System Metadata; adapters distinguish representations or namespaces without
 requiring a universal user taxonomy.
 
+State meaning, storage representation and query capability are separate. Each
+adapter selects one authoritative representation per state; do not maintain a
+plain Status and a system tag as competing values. When system tags are selected,
+prefer names such as `#gpk/project/active`, distinct from User Tags. This naming
+does not require a backend to support arbitrary tag depth or tag filtering.
+Native fields and checkboxes remain valid representations. Domain callers ask
+for entity states, not a particular tag API; adapters disclose how that query
+is actually fulfilled and what it covers.
+
 ## Area
 
 An Area is an independently readable, user-editable document containing continuing
@@ -345,6 +354,12 @@ without making all work executable. Upcoming, Waiting and Unscheduled are views.
 Preserve overdue, doing and undated work in retrieval. Native task views may not
 enforce parent-state rules; read current Project state and disclose limitations.
 A deterministic Focus engine must document precise inclusion rules.
+
+Freshly reading search candidates verifies those candidates, not the completeness
+of discovery. A limited result can support a labeled Focus shortlist; it cannot
+establish that all commitments were reviewed or no unfinished Tasks remain.
+Queries must disclose scope and coverage; complete inventories require evidence
+that the relevant population and its current state were adequately traversed.
 
 | Review | Coverage |
 | --- | --- |

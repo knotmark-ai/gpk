@@ -30,7 +30,9 @@ Deliver in four implementation slices, validating each before enabling its Skill
 1. **Domain and adapter minimum.** Implement scoped reads/search, create/update,
    state/time/link operations, concrete Craft representation and independent
    Knowledge Backend/Harness/User Control boundaries. Verify initial Craft-backed
-   control discovery, fresh reads, conflicts and effect readback. Enable deletion
+   control discovery, fresh reads, conflicts and effect readback. Verify state
+   representation separately from state-query support, including scoped traversal,
+   search omissions, predicate enforcement and honest coverage. Enable deletion
    and advanced restructuring only when their preservation/recovery contract works.
 2. **Personalized first workflow.** Implement Setup → personal Project template →
    Plan → Work/result return. Provide usable defaults, adopt existing resources,
