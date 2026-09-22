@@ -1,0 +1,4 @@
+---
+name: gpk-ingest
+description: Reserved GPK source-handling workflow for capture, preparation, and routing useful information into knowledge or action. Not implemented.
+---

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "gpk",
+  "description": "Goal- and project-driven knowledge workflows for Claude Code",
+  "owner": {
+    "name": "Knotmark AI"
+  },
+  "plugins": [
+    {
+      "name": "gpk",
+      "description": "Organize goals, projects, and knowledge in Craft with GPK",
+      "version": "0.1.0",
+      "source": "./plugin",
+      "author": {
+        "name": "Knotmark AI"
+      },
+      "homepage": "https://github.com/knotmark-ai/gpk",
+      "category": "productivity"
+    }
+  ]
+}

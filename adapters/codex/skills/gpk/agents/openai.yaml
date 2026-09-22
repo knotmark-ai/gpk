@@ -1,0 +1,6 @@
+interface:
+  display_name: "GPK"
+  short_description: "GPK methodology and read-only assessment"
+  default_prompt: "Use $gpk to explain the GPK method and assess these notes without changing them."
+policy:
+  allow_implicit_invocation: true

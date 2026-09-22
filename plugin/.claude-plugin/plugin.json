@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "gpk",
+  "displayName": "GPK",
+  "version": "0.1.0",
+  "description": "GPK methodology and read-only knowledge assessment. Foundation for portable goal- and project-driven workflows.",
+  "author": {
+    "name": "Knotmark AI",
+    "url": "https://github.com/knotmark-ai"
+  },
+  "homepage": "https://github.com/knotmark-ai/gpk",
+  "repository": "https://github.com/knotmark-ai/gpk",
+  "license": "MIT",
+  "keywords": [
+    "goals",
+    "projects",
+    "knowledge-management",
+    "craft",
+    "agent-skill"
+  ],
+  "skills": "./skills/"
+}
