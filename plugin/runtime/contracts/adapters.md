@@ -87,7 +87,7 @@ a content fingerprint can detect divergence without preventing a concurrent edit
 An authority reference is not itself authorization: check current control and
 host permissions. An adapter cannot manufacture a grant by accepting a string.
 Unknown state, incomplete search and inaccessible content must not be returned as
-an empty successful result. Report partial effects even if the final tool call failed.
+an empty, complete result that asserts absence. Report partial effects even if the final tool call failed.
 Creation returns the canonical created reference explicitly; `affected` is not an
 ordered return-value convention. Reads and discovery carry coverage/continuation;
 an incomplete Project read cannot establish that no unfinished child Tasks remain.
