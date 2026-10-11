@@ -67,6 +67,14 @@ const UUID = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
+/**
+ * A JSON payload for a single-quoted `--json '…'` argument. Apostrophes become the
+ * JSON escape \u0027, which Craft decodes back, so content keeps them (verified 2026-10-11).
+ */
+export function jsonArgument(value: unknown): string {
+  return JSON.stringify(value).replace(/'/g, "\\u0027");
+}
+
 /** The new row's ID in an items-add receipt: the first block ID that is not the Collection's. */
 function createdRowId(receipt: string, collectionId: string): string | undefined {
   return receipt.match(new RegExp(UUID.source, "g"))?.find(id => id.toLowerCase() !== collectionId.toLowerCase());
@@ -131,7 +139,11 @@ export function createCollectionOperations(ctx: CraftContext) {
     const block = await ctx.readBlock(ref.id, 1);
     if (!block.ok) return block.error.code === "invalid" ? failure("not-found", `No ${kind} row with this ID is readable.`, `Re-resolve the ${kind}.`, [ref]) : block;
     if (block.value.type !== "collectionItem") return failure("invalid", `The block is not a Collection row.`, `Use the operations of the entity this block belongs to.`, [ref]);
-    void collectionId;
+    // A row block does not name its Collection, so membership is checked against the
+    // configured Collection's items; a row of any other Collection is not this entity.
+    const rows = await listItems(collectionId);
+    if (!rows.ok) return rows;
+    if (!rows.value.some(row => row.id.toLowerCase() === ref.id.toLowerCase())) return failure("not-found", `The row is not in the ${kind}s Collection.`, `Resolve the ${kind} again; rows of other Collections are not GPK ${kind}s.`, [ref]);
     return { ok: true, value: block.value, limits: [] };
   }
 
@@ -281,6 +293,17 @@ export function createCollectionOperations(ctx: CraftContext) {
   // ---------- Projects ----------
   async function projectOf(block: CraftBlock, scope: string): Promise<Project> { return toProject(block, scope); }
 
+  /** A material is a nested non-task page of its Project's row; anything else is out of scope. */
+  async function readMaterial(ref: ProjectMaterialRef): Promise<Result<CraftBlock>> {
+    const scoped = await ctx.space(); if (!scoped.ok) return scoped;
+    if (ref.scope !== scoped.value.id || !UUID.test(ref.id)) return failure("invalid", "The material reference is not a block in this space.", "List the Project's materials again.", [ref]);
+    const loc = await locations(); if (!loc.ok) return loc;
+    const owner = await readItem(ref.project, loc.value.project, "Project"); if (!owner.ok) return owner;
+    const child = (owner.value.content ?? []).find(block => block.id.toLowerCase() === ref.id.toLowerCase());
+    if (!child || child.type !== "page" || child.listStyle === "task") return failure("not-found", "The block is not a material page of this Project.", "List the Project's materials again.", [ref]);
+    return ctx.readBlock(ref.id, 1);
+  }
+
   const materials: ProjectMaterials = {
     async list(project, options) {
       const scoped = await ctx.space(); if (!scoped.ok) return scoped;
@@ -295,10 +318,7 @@ export function createCollectionOperations(ctx: CraftContext) {
       return { ok: true, value: { items, coverage: "complete" }, limits: ["Nested pages only; inline sections are part of the Project body. Read each material for its content."] };
     },
     async read(ref) {
-      const scoped = await ctx.space(); if (!scoped.ok) return scoped;
-      if (ref.scope !== scoped.value.id || !UUID.test(ref.id)) return failure("invalid", "The material reference is not a block in this space.", "List the Project's materials again.", [ref]);
-      const block = await ctx.readBlock(ref.id, 1); if (!block.ok) return block;
-      if (block.value.type !== "page") return failure("invalid", "The block is not a nested page.", "List the Project's materials again.", [ref]);
+      const block = await readMaterial(ref); if (!block.ok) return block;
       return { ok: true, value: { ref, value: { title: block.value.title ?? block.value.markdown ?? "", content: ctx.bodyOf(block.value), presentation: "child-document" }, version: ctx.digestOf(block.value), coverage: "complete" }, limits: [] };
     },
     async append(project, material, guard) {
@@ -311,7 +331,7 @@ export function createCollectionOperations(ctx: CraftContext) {
       let command: string;
       if (material.presentation === "child-document") {
         const payload = [{ type: "page", markdown: material.title.trim(), content: material.content.trim() ? [{ type: "text", markdown: material.content }] : [] }];
-        command = `blocks add --id ${project.id} --json '${JSON.stringify(payload).replace(/'/g, "")}'`;
+        command = `blocks add --id ${project.id} --json '${jsonArgument(payload)}'`;
       } else {
         command = `blocks add --id ${project.id} --markdown ${JSON.stringify(`## ${material.title.trim()}\n\n${material.content}`)}`;
       }
@@ -325,7 +345,7 @@ export function createCollectionOperations(ctx: CraftContext) {
       if (update.title === undefined && !update.edits?.length) return failure("invalid", "Supply a title or at least one edit.", "Nothing to change.");
       const loc = await locations(); if (!loc.ok) return loc;
       const granted = await ctx.authorizeRoot(guard, "projects.materials.update", loc.value.project, ref); if (!granted.ok) return granted;
-      const block = await ctx.readBlock(ref.id, 1); if (!block.ok) return block;
+      const block = await readMaterial(ref); if (!block.ok) return block;
       if (guard.expected !== undefined && guard.expected !== ctx.digestOf(block.value)) return failure("conflict", "The material changed since it was read.", "Read it again and retry.", [ref]);
       const plans = ctx.planEdits(block.value, update.edits ?? [], ref); if (!plans.ok) return plans;
       if (update.title !== undefined) {

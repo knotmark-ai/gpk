@@ -78,12 +78,15 @@ representation choice and is independent of the transport that carries it.
   (`materials.list` returns nested non-task pages; inline material is a heading
   plus paragraphs in the body). Closing a Project is refused while any Task in
   its row is open; transitions and Area changes append a dated reason block.
-- **Layout establishment (Setup):** everything GPK creates lives under one
-  namespace folder (default a root folder named `GPK`, reused if present).
-  Inside it, one host document (default title `GPK`) holds the Areas Collection
+- **Layout establishment (Setup):** the default assumes a workspace dedicated
+  to GPK and creates everything at the top level (decision of 2026-10-11, after
+  the fresh-space run showed a lone `GPK` folder adds a level without
+  separating anything). In a workspace that also holds other material, a
+  namespace folder (`{"folder": "GPK"}`, reused if present) holds everything GPK
+  creates. One host document (default title `GPK`) holds the Areas Collection
   (`Status: active, inactive`) and the Projects Collection (`Status: planned,
   active, paused, completed, canceled`; `Area` relation to the Areas
-  Collection), and Sources, Wikis and Outputs are subfolders. Created
+  Collection), and Sources, Wikis and Outputs are folders beside it. Created
   Collections get people-facing views (Projects: Board by Status, By Area,
   Active; Areas: Board); the bundled entity templates are installed once by
   title (`GPK Project` and so on) into Craft's Templates area, with Collection
@@ -439,6 +442,8 @@ Every probe row and Task was deleted afterwards (`collections items-delete`,
 | Knowledge slice (2026-10-11) | In the fresh space: `gpk_sources_create` (origin line, Summary heading, body) verified on read-back and `documents list --folder` listed it; `gpk_sources_update` edited one paragraph with `expected`; `gpk_wikis_create` and `gpk_outputs_create` likewise. Four `gpk_links_add` calls (Wiki→Source, Wiki→Output, Project→Wiki, Task→Output) wrote `- [title](block://id) — context` bullets; the Wiki got one `## Links` heading with both bullets under it, the Task got a child block; a repeated link returned `conflict`. `gpk_links_query` on the Source found the incoming Wiki link, on the Output the Task and Wiki links; `relatedTo` on Sources and Projects filtered by those links. `gpk_checkpoints_read` returned null, the first save created the `GPK System` page and the key page, the read returned the two-paragraph content, and a save with `expected` replaced it. Timings: document writes 3–7 s, link adds 7–12 s (record inventory plus read-back), link discovery and `relatedTo` queries 5–8 s on a space with a dozen records; the inventory listings dominate |
 | Craft 500s | During this run `craft_write` answered 500 once on a body append and four times in a row on `documents delete`; each call succeeded when repeated a few seconds later. The adapter reported the append as `partial` naming the bodiless document, which is the intended shape. The connection now repeats a read once after a 500; writes are left to the caller because their effect is unknown |
 | Review (2026-10-11) | `gpk_review_inventory` (weekly) over the fresh space took about 12 s, dominated by the space-wide task listing for standalone Tasks; it reported one overdue Project-owned Task, one `no-next-action` Project, one `overdue` Project, the Area's Project counts, complete coverage and the gap that eight task blocks in Craft's sample documents were outside GPK's locations. A weekly conclusion was appended under the Project's Results & Review with a multi-paragraph `gpk_projects_update` edit (a paragraph break inserts a sibling block in a row body too), the overdue Task was rescheduled, the stalled Project paused with a reason, and the second inventory showed no overdue Task and no signal |
+| Review fixes (2026-10-11) | Three defects from the code review, each verified in the fresh space after the fix. (1) The connection repeated any failed call once after reconnecting, so a write answered with 500 ran twice whenever Craft had in fact applied it; writes are now repeated only after 401/403/404, when the server provably did not run them. (2) Row operations accepted any `collectionItem`, so the Projects grant could edit Areas rows or rows of the user's own Collections, and material updates accepted any page; rows are now checked against the configured Collection's items and materials against their Project row's children (an Areas row passed as a Project and a Wiki page passed as a material both returned `not-found`). (3) JSON arguments stripped apostrophes; they are now escaped as `\u0027`, which Craft decodes (a material titled "Owner's notes" read back intact). Semicolons inside quoted arguments are stored literally, so body text cannot split into a second command |
+| Top-level layout (2026-10-11) | The fresh workspace was moved from the `GPK` namespace folder to the top level with `folders move --parent root` and `documents move --destination unsorted`; block IDs did not change, so Settings and grants stayed valid and Setup inspect reported every location `ok` |
 | Not covered | Codex has not run the slices; archive, restore and remove remain unimplemented |
 
 ## State representation and query mapping (2026-09-22)

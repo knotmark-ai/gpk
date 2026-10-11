@@ -4,6 +4,15 @@ All notable changes to GPK will be documented here.
 
 ## Unreleased
 
+- Default Setup layout is now the top level of a workspace dedicated to GPK;
+  the `GPK` namespace folder is opt-in for shared workspaces.
+- Fix: the Craft connection no longer repeats a write after a 5xx or network
+  failure, which could create duplicate documents, rows or blocks.
+- Fix: Area and Project operations check that the row belongs to the
+  configured Collection, and material operations that the page belongs to its
+  Project; previously the Projects grant could edit rows of other Collections
+  and any page in the space.
+- Fix: apostrophes in JSON arguments are escaped instead of stripped.
 - Implement the Review slice: a read-only `gpk_review_inventory` that reads
   the reviewed population in one call (Inbox captures; overdue, today,
   upcoming, doing, waiting and unscheduled Tasks; Projects by state with

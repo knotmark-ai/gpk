@@ -213,7 +213,12 @@ export function createCraftConnection(options: CraftConnectionOptions): CraftCon
         }
         const mapped = mapError(error, tool);
         // One reconnect covers a stale session or a token rotated by another process.
-        if (attempt === 1 && mapped.ok === false && mapped.error.code !== "invalid") {
+        // A write is repeated only when the server provably did not run it (auth or an
+        // expired session); after a 5xx or a network failure its effect is unknown, and
+        // repeating it could create a second document, row or block.
+        const status = error instanceof SdkHttpError ? (error as { status?: number }).status ?? 0 : 0;
+        const notExecuted = error instanceof UnauthorizedError || status === 401 || status === 403 || status === 404;
+        if (attempt === 1 && mapped.ok === false && mapped.error.code !== "invalid" && (tool === "craft_read" || notExecuted)) {
           await disconnect();
           record = null;
           continue;

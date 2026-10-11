@@ -26,11 +26,21 @@ GPK is its own Craft connection; the host's Craft connector is irrelevant.
 
 ## 3. Propose the layout and get one confirmation
 
-The default plan touches nothing the user already has: one root folder named
-`GPK` holds a host document with the Areas and Projects Collections and the
-Sources, Wikis and Outputs folders; the bundled entity templates are installed
-into Craft's Templates area; the Collections get Board, By Area and Active
-views. Propose exactly that unless the user asks for something else.
+GPK works best in a Craft workspace dedicated to it. Ask whether this one is;
+the inspection helps: a new workspace shows only Craft's own sample folder
+(`How to use Craft`) and no Collections.
+
+- **Dedicated workspace (default):** everything at the top level. A host
+  document `GPK` holds the Areas and Projects Collections, and the Sources,
+  Wikis and Outputs folders sit at the root. Omit `namespace` (or pass
+  `"root"`).
+- **Shared workspace:** pass `namespace: {"folder": "GPK"}` so one folder holds
+  the host document and the three folders and nothing the user already has is
+  touched.
+
+In both cases the bundled entity templates are installed into Craft's
+Templates area and the Collections get Board, By Area and Active views.
+Propose exactly that unless the user asks for something else.
 
 Adoption of existing structures happens only when the user names them. The
 inspection lists existing folders (with document counts and parents) and

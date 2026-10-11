@@ -773,7 +773,8 @@ execution environment. See the authoritative
 ## Existing knowledge bases (deferred decision)
 
 The first release targets a knowledge base that GPK sets up itself: a fresh
-Craft space, or a dedicated namespace folder in an existing space. In both
+Craft workspace with the structures at its top level (the default), or a
+dedicated namespace folder in an existing space. In both
 cases GPK writes only inside the structures Setup created and treats
 everything else in the space as read-only material it may search and link
 but never edits, moves or classifies. Adoption of an existing folder or

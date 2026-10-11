@@ -9,7 +9,7 @@ import type {
   ReadOptions, Result, Snapshot, Version, WriteReceipt,
 } from "../domain/operation-types.js";
 import type { KnowledgeLayout } from "../domain/user-control-port.js";
-import { createCollectionOperations, type CraftBlock, type CraftContext } from "./craft-collections.js";
+import { createCollectionOperations, jsonArgument, type CraftBlock, type CraftContext } from "./craft-collections.js";
 import { createDocumentOperations } from "./craft-documents.js";
 import type { CraftConnection, CraftSpace } from "./craft-connection.js";
 import { CRAFT_TEMPLATE_ROLES, craftTemplateBody, craftTemplateTitle, type TemplateLanguage } from "./craft-templates.js";
@@ -57,13 +57,15 @@ export type LayoutInspection = {
   };
 };
 /**
- * Each role is either adopted by ID or created by name. Everything GPK creates lives
- * under one namespace folder (default `GPK`), so the user's own tree is untouched and
- * the whole installation can be removed by deleting that folder. Adoption of existing
- * folders or Collections happens only when the user names them.
+ * Each role is either adopted by ID or created by name. In a workspace dedicated to
+ * GPK (the default) the structures sit at the top level: the host document in
+ * Unsorted and the three folders at the root. In a workspace that also holds other
+ * material, a namespace folder keeps everything GPK creates together so the user's
+ * own tree is untouched. Adoption of existing folders or Collections happens only
+ * when the user names them.
  */
 export type LayoutPlan = {
-  /** Namespace folder for created structures: by name (reused if it already exists at the root), by ID, or `root` for none. */
+  /** Where created structures go: `root` (default, a dedicated workspace), or a namespace folder by name (reused if it exists at the root) or by ID. */
   namespace?: { folder: string } | { folderId: string } | "root";
   hostDocument: { title: string } | { rootId: string };
   areas: { name: string } | { id: string };
@@ -782,8 +784,8 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
       if (!granted.ok) return granted;
       const fresh = await checkExpected(guard, current.value, ref);
       if (!fresh.ok) return fresh;
-      const payload = JSON.stringify({ id: ref.id, taskInfo: { scheduleDate: time } });
-      const written = await connection.write(`blocks update --json '${payload.replace(/'/g, "")}'`);
+      const payload = jsonArgument({ id: ref.id, taskInfo: { scheduleDate: time } });
+      const written = await connection.write(`blocks update --json '${payload}'`);
       if (!written.ok) return written;
       return verifyTask(ref, task => (task.time ?? null) === time, "Read the Task back; the planned time may not have persisted.");
     },
@@ -957,7 +959,7 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
       }
       // Namespace folder: reuse a root-level folder of that name, else create it.
       let namespaceId: string | null = null;
-      const namespacePlan = plan.namespace ?? { folder: "GPK" };
+      const namespacePlan = plan.namespace ?? "root";
       if (namespacePlan !== "root") {
         if ("folderId" in namespacePlan) {
           const all = await listFolders();

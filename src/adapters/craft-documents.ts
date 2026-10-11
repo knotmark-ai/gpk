@@ -5,7 +5,7 @@ import type {
 } from "../domain/knowledge-backend-port.js";
 import type { CreateReceipt, Failure, GrantedWriteGuard, Page, ReadOptions, Result, Snapshot, WriteReceipt } from "../domain/operation-types.js";
 import type { KnowledgeLayout } from "../domain/user-control-port.js";
-import type { CraftBlock, CraftContext, createCollectionOperations } from "./craft-collections.js";
+import { jsonArgument, type CraftBlock, type CraftContext, type createCollectionOperations } from "./craft-collections.js";
 
 /**
  * Sources, Wikis and Outputs as documents in the folders Setup established, plus
@@ -365,8 +365,8 @@ export function createDocumentOperations(ctx: CraftContext, collections: ReturnT
     const existing = (root.value.content ?? []).find(child => child.type === "page" && (child.markdown ?? "").trim() === SYSTEM_TITLE);
     if (existing) { const page = await ctx.readBlock(existing.id, 1); return page.ok ? page : page; }
     if (!create) return { ok: true, value: null, limits: [] };
-    const payload = JSON.stringify([{ type: "page", markdown: SYSTEM_TITLE, content: [{ type: "text", markdown: "GPK keeps processing checkpoints here; the Agent reads and writes them." }] }]);
-    const added = await ctx.connection.write(`blocks add --id ${host.value} --json '${payload.replace(/'/g, "")}'`); if (!added.ok) return added;
+    const payload = jsonArgument([{ type: "page", markdown: SYSTEM_TITLE, content: [{ type: "text", markdown: "GPK keeps processing checkpoints here; the Agent reads and writes them." }] }]);
+    const added = await ctx.connection.write(`blocks add --id ${host.value} --json '${payload}'`); if (!added.ok) return added;
     const id = added.value.match(/IDs: <([^>]+)>/)?.[1];
     if (!id) return failure("uncertain", "Craft did not report the created system page.", "Read the host document to find it.");
     return ctx.readBlock(id, 1);
@@ -401,8 +401,8 @@ export function createDocumentOperations(ctx: CraftContext, collections: ReturnT
         entryId = entry.id;
       } else {
         if (guard.expected !== undefined) return failure("conflict", "No checkpoint exists for this key, but expected was supplied.", "Omit expected for the first save.");
-        const payload = JSON.stringify([{ type: "page", markdown: key.trim(), content: [] }]);
-        const added = await ctx.connection.write(`blocks add --id ${page.value.id} --json '${payload.replace(/'/g, "")}'`); if (!added.ok) return added;
+        const payload = jsonArgument([{ type: "page", markdown: key.trim(), content: [] }]);
+        const added = await ctx.connection.write(`blocks add --id ${page.value.id} --json '${payload}'`); if (!added.ok) return added;
         const id = added.value.match(/IDs: <([^>]+)>/)?.[1];
         if (!id) return failure("uncertain", "Craft did not report the created checkpoint page.", "Read the system page to find it.");
         entryId = id;

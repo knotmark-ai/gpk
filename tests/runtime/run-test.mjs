@@ -19,12 +19,13 @@ const probe = buildSync({
     'export { createCraftAdapter, parseTaskListing, parseActionLine } from "./src/adapters/craft.ts";',
     'export { createLocalControlAdapter, resolveControlRoot } from "./src/adapters/local-control.ts";',
     'export { memorySecretStore, fileSecretStore } from "./src/adapters/secret-store.ts";',
+    'export { createCraftConnection } from "./src/adapters/craft-connection.ts";',
     'export { createOperations } from "./src/runtime/operations.ts";',
     'export { bootstrap } from "./src/runtime/bootstrap.ts";',
   ].join("\n"), resolveDir: repo, loader: "ts" },
   bundle: true, platform: "node", format: "esm", write: false, loader: { ".md": "text" },
 });
-const { createCraftAdapter, parseTaskListing, parseActionLine, createLocalControlAdapter, resolveControlRoot, memorySecretStore, fileSecretStore, createOperations, bootstrap } =
+const { createCraftAdapter, parseTaskListing, parseActionLine, createLocalControlAdapter, resolveControlRoot, memorySecretStore, fileSecretStore, createCraftConnection, createOperations, bootstrap } =
   await import(`data:text/javascript;base64,${Buffer.from(probe.outputFiles[0].contents).toString("base64")}`);
 
 const SPACE = { id: "space-1", name: "Test Space", timezone: "Asia/Shanghai" };
@@ -510,12 +511,13 @@ function fakeCraft() {
   assert.equal(inspection.value.candidates.folders[0].name, "Sources");
   const clash = await knowledge.layout.establish({ namespace: "root", hostDocument: { title: "GPK" }, areas: { name: "Areas" }, projects: { name: "Projects" }, sources: { name: "Sources" }, wikis: { name: "Wikis" }, outputs: { name: "Outputs" }, views: false, templates: false });
   assert.ok(["partial", "ambiguous"].includes(clash.error.code), "a root-level name clash is refused: " + JSON.stringify(clash));
-  const established = await knowledge.layout.establish({ hostDocument: { title: "GPK" }, areas: { name: "Areas" }, projects: { name: "Projects" }, sources: { id: existingSources.id }, wikis: { name: "Wikis" }, outputs: { name: "Outputs" }, templates: { language: "zh-CN" } });
+  // A shared workspace: a namespace folder keeps GPK's structures apart from the user's own.
+  const established = await knowledge.layout.establish({ namespace: { folder: "GPK" }, hostDocument: { title: "GPK" }, areas: { name: "Areas" }, projects: { name: "Projects" }, sources: { id: existingSources.id }, wikis: { name: "Wikis" }, outputs: { name: "Outputs" }, templates: { language: "zh-CN" } });
   assert.equal(established.ok, true, JSON.stringify(established));
   assert.equal(established.value.locations.source.id, existingSources.id);
   assert.equal(established.value.adopted.length, 1);
   assert.ok(established.value.created.length >= 5);
-  // Namespace: everything created sits under a root folder named GPK; adopted folders stay where they are.
+  // Namespace: everything created sits under the named root folder; adopted folders stay where they are.
   const namespace = fake.folders.get(established.value.namespace.id);
   assert.equal(namespace.name, "GPK");
   assert.equal(namespace.parentId, null);
@@ -534,7 +536,7 @@ function fakeCraft() {
   assert.ok(!/^- (状态|主 Area)/m.test(projectTemplate), "Collection-column lines are stripped from the Project template");
   assert.ok(!projectTemplate.includes("<!--"), "authoring comments are stripped");
   // Rerunning with the same names reuses the namespace folder and does not reinstall templates.
-  const again = await knowledge.layout.establish({ hostDocument: { rootId: established.value.created.find(r => fake.documents.get(r.id)?.title === "GPK").id }, areas: { id: established.value.locations.area.id }, projects: { id: established.value.locations.project.id }, sources: { id: existingSources.id }, wikis: { id: established.value.locations.wiki.id }, outputs: { id: established.value.locations.output.id }, templates: { language: "zh-CN" } });
+  const again = await knowledge.layout.establish({ namespace: { folder: "GPK" }, hostDocument: { rootId: established.value.created.find(r => fake.documents.get(r.id)?.title === "GPK").id }, areas: { id: established.value.locations.area.id }, projects: { id: established.value.locations.project.id }, sources: { id: existingSources.id }, wikis: { id: established.value.locations.wiki.id }, outputs: { id: established.value.locations.output.id }, templates: { language: "zh-CN" } });
   assert.equal(again.ok, true, JSON.stringify(again));
   assert.equal(again.value.namespace.id, namespace.id, "an existing root-level GPK folder is adopted");
   assert.equal(again.value.templates.length, 0, "templates already present by title are not duplicated");
@@ -729,6 +731,45 @@ function fakeCraft() {
   assert.equal((await knowledge.checkpoints.read("ingest/other")).value, null);
   console.log("PASS: Sources, Wikis and Outputs are folder documents; links live in record bodies; checkpoints in the GPK System page");
 
+  // A dedicated workspace: the default plan puts everything at the top level.
+  {
+    const freshFake = fakeCraft();
+    const freshKnowledge = createCraftAdapter({ connection: freshFake.connection, backendId: "primary" });
+    const fresh = await freshKnowledge.layout.establish({ hostDocument: { title: "GPK" }, areas: { name: "Areas" }, projects: { name: "Projects" }, sources: { name: "Sources" }, wikis: { name: "Wikis" }, outputs: { name: "Outputs" }, views: false, templates: false });
+    assert.equal(fresh.ok, true, JSON.stringify(fresh));
+    assert.equal(fresh.value.namespace, null, "no namespace folder by default");
+    assert.deepEqual([...freshFake.folders.values()].map(f => [f.name, f.parentId]).sort(), [["Outputs", null], ["Sources", null], ["Wikis", null]]);
+    const freshHost = [...freshFake.documents.values()].find(d => d.title === "GPK");
+    assert.equal(freshHost.folderId, null, "the host document sits at the top level (Unsorted)");
+  }
+  console.log("PASS: the default Setup plan builds a dedicated workspace at its top level");
+
+  // Containment: rows must belong to the configured Collection, materials to their Project.
+  const areaAsProject = { kind: "Project", scope: SPACE.id, id: areaRef.id };
+  assert.equal((await knowledge.projects.update(areaAsProject, { title: "hijack" }, { grant: projectGrant })).error.code, "not-found", "an Areas row is not a Project");
+  assert.equal(fake.collections.get(layoutLocations.area.id).rows.find(r => r.id === areaRef.id).title !== "hijack", true);
+  assert.equal((await knowledge.projects.transition(areaAsProject, "paused", "x", { grant: projectGrant })).error.code, "not-found");
+  assert.equal((await knowledge.tasks.create({ title: "stray", content: "", state: "todo", project: areaAsProject }, { grant: projectGrant })).error.code, "not-found", "Tasks cannot be put into a row of another Collection");
+  const otherProject = await knowledge.projects.create({ title: "Other", content: "", state: "planned", primaryArea: areaRef }, { grant: projectGrant });
+  const materialOfFirst = (await knowledge.projects.materials.list(projectRef)).value.items[0].ref;
+  const misattributed = { ...materialOfFirst, project: otherProject.value.created };
+  assert.equal((await knowledge.projects.materials.update(misattributed, { title: "moved" }, { grant: projectGrant })).error.code, "not-found", "a material is edited only through its own Project");
+  assert.equal((await knowledge.projects.materials.read(misattributed)).error.code, "not-found");
+  const wikiPageAsMaterial = { scope: SPACE.id, id: wikiRef.id, role: "project-material", project: projectRef };
+  assert.equal((await knowledge.projects.materials.update(wikiPageAsMaterial, { title: "x" }, { grant: projectGrant })).error.code, "not-found", "an arbitrary page is not a material");
+
+  // Apostrophes survive JSON arguments.
+  const quoted = await knowledge.projects.materials.append(projectRef, { title: "Owner's notes", content: "Don't drop this.", presentation: "child-document" }, { grant: projectGrant });
+  assert.equal(quoted.ok, true, JSON.stringify(quoted));
+  const quotedRead = await knowledge.projects.materials.read(quoted.value.created);
+  assert.deepEqual([quotedRead.value.value.title, quotedRead.value.value.content], ["Owner's notes", "Don't drop this."]);
+  assert.equal((await knowledge.checkpoints.save("ingest/o'brien", "x", { grant: systemGrant })).value.verified, true);
+  assert.equal((await knowledge.checkpoints.read("ingest/o'brien")).value.value, "x", "a key with an apostrophe reads back");
+  assert.equal((await knowledge.checkpoints.save("ingest/o'brien", "y", { grant: systemGrant, expected: (await knowledge.checkpoints.read("ingest/o'brien")).value.version })).value.verified, true);
+  const systemPage = fake.documents.get(hostRootId).body.find(b => b.markdown === "GPK System");
+  assert.equal(systemPage.children.filter(p => p.markdown === "ingest/o'brien").length, 1, "saving again replaces, not duplicates");
+  console.log("PASS: rows, materials and Tasks stay inside their configured containers; apostrophes survive JSON arguments");
+
   // Operations resolve grants from the control store; tool arguments carry none.
   const root = path.join(temporary, "control");
   const control = createLocalControlAdapter({ root });
@@ -751,7 +792,7 @@ function fakeCraft() {
   const inv = review.value;
   assert.equal(inv.cadence, "weekly");
   assert.equal(inv.horizon, (() => { const d = new Date(`${inv.today}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 7); return d.toISOString().slice(0, 10); })());
-  assert.deepEqual(Object.fromEntries(Object.entries(inv.projects).map(([k, v]) => [k, v.length])), { planned: 1, active: 2, paused: 0, completed: 1, canceled: 0 });
+  assert.deepEqual(Object.fromEntries(Object.entries(inv.projects).map(([k, v]) => [k, v.length])), { planned: 2, active: 2, paused: 0, completed: 1, canceled: 0 });
   assert.deepEqual(inv.projects.active.find(p => p.title === "Stalled one").signals, ["no-next-action"]);
   const liveEntry = inv.projects.active.find(p => p.title === "Live one");
   assert.deepEqual([liveEntry.signals, liveEntry.tasks.open, liveEntry.tasks.overdue, liveEntry.tasks.next], [["overdue"], 2, 1, "2026-10-01"]);
@@ -761,7 +802,7 @@ function fakeCraft() {
   assert.equal(inv.captures.inbox.length, 1);
   assert.ok(inv.areas.find(a => a.ref.id === areaRef.id).projects.active >= 2, "Areas count their Projects by state");
   assert.equal(inv.population.coverage, "complete", JSON.stringify(inv.population));
-  assert.equal(inv.population.projects, 4);
+  assert.equal(inv.population.projects, 5);
   assert.equal((await operations.reviewInventory("daily", 400)).error.code, "invalid");
   console.log("PASS: the review inventory reads captures, actions, Projects with signals and Areas in one call with coverage");
 
@@ -830,6 +871,43 @@ function fakeCraft() {
   assert.equal(fs.statSync(path.join(temporary, "secrets", "secrets.json")).mode & 0o777, 0o600);
   console.log("PASS: bootstrap binds Craft from Settings and keeps secrets out of the control files");
 }
+
+// ---------- Craft connection retry policy against a local MCP-over-HTTP endpoint ----------
+{
+  const http = await import("node:http");
+  const calls = { craft_read: 0, craft_write: 0 };
+  const server = http.createServer(async (request, response) => {
+    if (request.method !== "POST") { response.writeHead(405).end(); return; }
+    let body = ""; for await (const chunk of request) body += chunk;
+    const message = JSON.parse(body);
+    if (message.method === "initialize") {
+      response.writeHead(200, { "content-type": "application/json", "mcp-session-id": "s1" });
+      response.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result: { protocolVersion: message.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: "fake-craft", version: "0" } } }));
+      return;
+    }
+    if (message.id === undefined) { response.writeHead(202).end(); return; }
+    if (message.method === "tools/call") {
+      calls[message.params.name]++;
+      // The write may or may not have run on the server; the client cannot tell.
+      response.writeHead(500, { "content-type": "text/plain" }).end("internal error");
+      return;
+    }
+    response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result: {} }));
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  const endpoint = `http://127.0.0.1:${server.address().port}/mcp`;
+  const connection = createCraftConnection({ endpoint, secretKey: "k", secrets: memorySecretStore() });
+  const write = await connection.write("documents create --title \"Once\"");
+  assert.equal(write.ok, false);
+  assert.equal(write.error.code, "unavailable");
+  assert.equal(calls.craft_write, 1, "a write that failed with 500 is not repeated");
+  const read = await connection.read("folders list");
+  assert.equal(read.ok, false);
+  assert.ok(calls.craft_read >= 2, "a read is repeated after a 500");
+  await connection.close();
+  server.close();
+}
+console.log("PASS: the Craft connection repeats reads after a server error but never a write whose effect is unknown");
 
 function domainResult(result) {
   const parsed = JSON.parse(result.content[0].text);

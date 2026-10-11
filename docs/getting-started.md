@@ -102,7 +102,8 @@ the Setup Skill to onboard GPK, or drive the tools yourself:
    connection, separate from the host's Craft connector. Poll
    `gpk_connection_status({})` until `tokens` is `verified`.
 3. `gpk_setup_establish({...})` with the plan the user confirmed. The default
-   creates a root folder `GPK` holding the host document (Areas and Projects
+   assumes a workspace dedicated to GPK and creates everything at the top
+   level: the host document (Areas and Projects
    Collections with Board/By Area/Active views) and the Sources/Wikis/Outputs
    folders, and installs the `GPK …` templates into Craft's Templates area.
    Existing folders or Collections are adopted only by ID when the user names
