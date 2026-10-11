@@ -1,0 +1,143 @@
+name: Release packages
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Serialize releases so two versions cannot race to update the distribution repo.
+concurrency:
+  group: gpk-release
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - name: Check release identity
+        if: github.ref_type == 'tag'
+        run: node -e 'const p = require("./package.json"); if (process.env.GITHUB_REF_NAME !== "v" + p.version) throw new Error("Tag must match package.json version");'
+      - run: pnpm test
+      - run: pnpm dist
+        env:
+          GPK_SOURCE_SHA: ${{ github.sha }}
+      # Upload only archive-root contents. Download jobs therefore receive *.zip
+      # and SHA256SUMS directly under their chosen destination, not archives/ again.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gpk-release
+          path: dist/archives/
+          include-hidden-files: true
+          if-no-files-found: error
+
+  # Only tag refs enable external publication; branch runs validate and package.
+  github-release:
+    if: github.ref_type == 'tag'
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: gpk-release
+          path: dist
+      # Retried tags may fill missing assets, but existing asset bytes must match.
+      - name: Publish versioned archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            mkdir -p existing
+            for asset in dist/*.zip dist/SHA256SUMS; do
+              filename="${asset##*/}"
+              if gh release download "$RELEASE_TAG" --pattern "$filename" --dir existing; then
+                cmp "$asset" "existing/$filename" || { echo "Release asset differs: $filename; publish a new version"; exit 1; }
+              else
+                gh release upload "$RELEASE_TAG" "$asset"
+              fi
+            done
+          else
+            release_flags=(--verify-tag --generate-notes)
+            # Strip build metadata before inspecting the SemVer prerelease part.
+            case "${RELEASE_TAG%%+*}" in
+              *-*) release_flags+=(--prerelease --latest=false) ;;
+            esac
+            gh release create "$RELEASE_TAG" dist/*.zip dist/SHA256SUMS "${release_flags[@]}"
+          fi
+
+  distribution:
+    if: github.ref_type == 'tag' && vars.GPK_DISTRIBUTION_REPOSITORY != ''
+    needs: github-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check destination
+        env:
+          DESTINATION: ${{ vars.GPK_DISTRIBUTION_REPOSITORY }}
+          SOURCE: ${{ github.repository }}
+        run: |
+          test "$(printf '%s' "$DESTINATION" | tr '[:upper:]' '[:lower:]')" != "$(printf '%s' "$SOURCE" | tr '[:upper:]' '[:lower:]')" || { echo 'Use a separate distribution repository'; exit 1; }
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.GPK_DISTRIBUTION_REPOSITORY }}
+          ref: ${{ vars.GPK_DISTRIBUTION_BRANCH || 'main' }}
+          token: ${{ secrets.GPK_DISTRIBUTION_TOKEN }}
+          path: distribution
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: gpk-release
+          path: artifacts
+      - name: Restore marketplace permissions
+        run: |
+          # Artifact transport does not retain executable bits. The release ZIP does.
+          archives=(artifacts/gpk-marketplace-*.zip)
+          test "${#archives[@]}" -eq 1
+          unzip -q "${archives[0]}" -d artifacts/marketplace-unpacked
+      # New tags must advance the version. Existing tags compare generated content
+      # with the tagged tree and exit without moving the distribution branch.
+      - name: Update generated distribution
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          SOURCE_SHA: ${{ github.sha }}
+          DISTRIBUTION_BRANCH: ${{ vars.GPK_DISTRIBUTION_BRANCH || 'main' }}
+        run: |
+          # Prereleases are downloadable Release assets, not stable marketplace updates.
+          case "${RELEASE_TAG%%+*}" in
+            *-*) echo "Skipping prerelease distribution: $RELEASE_TAG"; exit 0 ;;
+          esac
+          if ! git -C distribution show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            node scripts/check-release-version.mjs artifacts/marketplace-unpacked/release.json distribution/release.json "$RELEASE_TAG"
+          fi
+          # This destination is dedicated to CI-generated content. Preserve Git
+          # history and repository configuration; replace the generated tree.
+          # Release ZIPs normalize mtimes; equal-size files can still have changed bytes.
+          rsync -ac --delete --exclude='.git/' --exclude='.github/' artifacts/marketplace-unpacked/ distribution/
+          cd distribution
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git rev-parse --verify "refs/tags/$RELEASE_TAG" > /dev/null 2>&1; then
+            git diff --cached --quiet "refs/tags/$RELEASE_TAG" -- . ':(exclude).github' || { echo 'Existing distribution tag differs'; exit 1; }
+            exit 0
+          fi
+          if ! git diff --cached --quiet; then
+            git commit -m "Release $RELEASE_TAG from $SOURCE_SHA"
+          fi
+          git tag "$RELEASE_TAG"
+          git push --atomic origin "HEAD:refs/heads/$DISTRIBUTION_BRANCH" "refs/tags/$RELEASE_TAG"

@@ -1,0 +1,6 @@
+interface:
+  display_name: "GPK"
+  short_description: "GPK MCP entrypoint and capability checks"
+  default_prompt: "Use $gpk to check the GPK MCP runtime and relevant adapter capabilities."
+policy:
+  allow_implicit_invocation: true

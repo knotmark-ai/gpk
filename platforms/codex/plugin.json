@@ -1,0 +1,19 @@
+{
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "hooks": "./hooks/entry.json",
+  "interface": {
+    "displayName": "GPK",
+    "shortDescription": "GPK Skills and stdio MCP engineering skeleton",
+    "longDescription": "A portable goal- and project-driven knowledge method. This engineering skeleton exposes runtime diagnostics and unsupported adapter operations; storage and business workflows are not implemented.",
+    "category": "Productivity",
+    "capabilities": [
+      "skills"
+    ],
+    "brandColor": "#4F6F52",
+    "defaultPrompt": [
+      "Check the GPK MCP runtime status.",
+      "Show the GPK adapter capabilities without changing anything."
+    ]
+  }
+}
