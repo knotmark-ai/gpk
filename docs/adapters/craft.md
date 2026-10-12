@@ -97,9 +97,9 @@ representation choice and is independent of the transport that carries it.
   configured locations is read-only for GPK.
 - **Entity kind** is Collection membership for Projects and Areas. Sources, Wikis
   and Outputs are ordinary documents whose kind is the Settings layout location
-  that contains them (`documents list --folder`, which despite its documentation
-  does not include subfolders, so a document in a subfolder is not yet recognized;
-  see the 2026-10-12 command surface table); a document
+  that contains them, subfolders included (`documents list --folder` is not
+  recursive despite its documentation, so GPK expands the folder tree first; see
+  the 2026-10-12 command surface table); a document
   moved out of its location is unrecognized, not reclassified. The root block ID
   is the entity ID, its markdown is the title (renamed with `blocks update` on
   the root), and `documents create --title --folder` plus a body `blocks add`
@@ -330,19 +330,19 @@ wins and the row says so.
 
 | Behavior | Documented | Observed |
 |---|---|---|
-| `documents list --folder` | MCP help and REST: "includes subfolders recursively" | **Not recursive.** A parent folder whose documents all sit in a subfolder lists none (checked twice). Enumerate the folder tree and list each folder |
-| `blocks get` children | 50 direct children per page; cursor in a `Next page:` line (markdown) or `nextCursor` (JSON) | Holds. In JSON the cursor is a **top-level** `nextCursor` beside `data`, not on the block. Without following it, a page with more than 50 top-level blocks is silently cut at 50 |
+| `documents list --folder` | MCP help and REST: "includes subfolders recursively" | **Not recursive.** A parent folder whose documents all sit in a subfolder lists none (checked twice). GPK expands the folder tree (cached for a minute, refreshed on a miss) and lists every folder in one batched request |
+| `blocks get` children | 50 direct children per page; cursor in a `Next page:` line (markdown) or `nextCursor` (JSON) | Holds. In JSON the cursor is a **top-level** `nextCursor` beside `data`, not on the block. Without following it, a page with more than 50 top-level blocks is silently cut at 50; GPK follows it on every read (a 60-paragraph document read, edited at paragraph 57 and read back, 2026-10-12) |
 | Collection items through `blocks get --id <collection> --depth 1` | not stated | All items in one response (2,001 rows, no cursor) |
 | `collections items-get` | `--page-size` up to 200 | Returns 100 per page even with `--page-size 200` |
 | `search` | REST `/documents/search`: top 20 by relevance; MCP: `--cursor` | MCP returned all 25 matches in one response, no cursor. New content is indexed with a delay: 5 of 25 fresh documents after a few seconds, 25 after about five minutes. Link targets are not indexed |
 | `search --folder` | includes subfolders | Holds (unlike `documents list --folder`) |
 | `search --document` with `--folder`/`--location` | mutually exclusive | Not combined by GPK |
 | `documents create --documents '<array>'` | batch create | Works; the receipt is a count ("Created 25 documents") with no IDs, so IDs come from a listing |
-| `tasks list` scopes | `active` = open with date up to today, `upcoming` = open from tomorrow, `inbox`, `logbook`, `document`, `all` (every task block, all states) | `all` pages 1,000 per call and includes every completed task |
+| `tasks list` scopes | `active` = open with date up to today, `upcoming` = open from tomorrow, `inbox`, `logbook`, `document`, `all` (every task block, all states) | `all` pages 1,000 per call and includes every completed task. `active`/`upcoming` use the same listing format but leave out every open task without a date, including a Daily Note task whose date was cleared, so GPK uses them only for open-state queries with a dated window that excludes undated Tasks |
 | Batched commands (`a; b; c` in one call) | not stated | Count as one request: 40 calls carrying 200 commands in 36 s drew no 429 |
 | Rate limits | REST: 50 requests / 10 s per IP (shared with MCP), 100 requests / 60 s per space, 20,000 blocks / 60 s per space; 429 with `Retry-After` | Bursts of single calls hit 429 earlier (2026-10-10); batching keeps well inside |
 | Conditional writes, change feeds | none (no ETag, no webhooks, no modified-since on blocks) | Confirms `expected` must stay a read-back comparison |
-| `blocks update --json` | object or array, each with its own `id`; one call for many updates | Not yet used by GPK for text edits |
+| `blocks update --json` | object or array, each with its own `id`; one call for many updates | Accepts `markdown` per item and keeps list style and indentation; rejects the whole array when any markdown would yield several blocks. GPK sends single-paragraph edits as one array (verified: two edits, one request) and multi-paragraph edits as separate `--markdown` updates |
 | `blocks move --ids` | bulk move | Not yet used by GPK for reordering |
 | Rows and moves | items "must remain within their collection" | A row cannot be moved out; its children can (IDs kept) |
 | Templates | MCP "cannot currently instantiate a new document from an existing template" | No item templates for Collections either |

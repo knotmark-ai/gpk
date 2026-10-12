@@ -68,29 +68,52 @@ export function createDocumentOperations(ctx: CraftContext, collections: ReturnT
   }
 
   /** Every document in a folder (recursively), following the listing cursor. */
-  async function listDocuments(folderId: string): Promise<Result<Listed[]>> {
+  /**
+   * Every document in a folder and its subfolders. `documents list --folder` is not
+   * recursive despite its documentation (verified 2026-10-12), so the folder tree is
+   * expanded first and all folders are listed in one batched request; a folder whose
+   * listing pages is then followed on its own.
+   */
+  async function listDocuments(folderId: string, refresh = false): Promise<Result<Listed[]>> {
+    const folders = await ctx.folderWithDescendants(folderId, refresh);
+    if (!folders.ok) return folders;
     const rows: Listed[] = [];
     const seen = new Set<string>();
-    let command = `documents list --folder ${folderId}`;
-    for (let page = 0; page < MAX_LISTING_PAGES; page++) {
-      const listing = await ctx.connection.read(command);
-      if (!listing.ok) return listing.error.code === "invalid" ? failure("not-found", "The configured folder is not listable.", "Rerun Setup inspect to repair the layout.") : listing;
-      for (const line of listing.value.split("\n")) {
+    const collect = (text: string) => {
+      for (const line of text.split("\n")) {
         const match = line.match(/^\s*<([^>]+)>\s+(.*)$/);
         if (match && !seen.has(match[1]!.toLowerCase())) { seen.add(match[1]!.toLowerCase()); rows.push({ id: match[1]!, title: match[2]!.trim() }); }
       }
-      const next = listing.value.match(/--cursor\s+(\S+)/)?.[1];
-      if (!next) return { ok: true, value: rows, limits: [] };
-      command = `documents list --folder ${folderId} --cursor ${next}`;
+    };
+    for (let start = 0; start < folders.value.length; start += 20) {
+      const batch = folders.value.slice(start, start + 20);
+      const listing = await ctx.connection.read(batch.map(id => `documents list --folder ${id}`).join("; "));
+      if (!listing.ok) return listing.error.code === "invalid" ? failure("not-found", "The configured folder is not listable.", "Rerun Setup inspect to repair the layout.") : listing;
+      if (!/--cursor\s+\S+/.test(listing.value)) { collect(listing.value); continue; }
+      // A long folder pages; the batched text does not say which, so list these folders one by one.
+      for (const id of batch) {
+        let command = `documents list --folder ${id}`;
+        for (let page = 0; ; page++) {
+          if (page >= MAX_LISTING_PAGES) return failure("unavailable", `A folder listing exceeded ${MAX_LISTING_PAGES} pages.`, "Narrow the folder or retry later.");
+          const single = await ctx.connection.read(command);
+          if (!single.ok) return single;
+          collect(single.value);
+          const next = single.value.match(/--cursor\s+(\S+)/)?.[1];
+          if (!next) break;
+          command = `documents list --folder ${id} --cursor ${next}`;
+        }
+      }
     }
-    return failure("unavailable", `The folder listing exceeded ${MAX_LISTING_PAGES} pages.`, "Narrow the folder or retry later.");
+    return { ok: true, value: rows, limits: [] };
   }
 
   async function readDocument(ref: Ref, kind: DocumentKind, folderId: string): Promise<Result<CraftBlock>> {
     const scoped = await ctx.space();
     if (!scoped.ok) return scoped;
     if (ref.scope !== scoped.value.id || !UUID.test(ref.id)) return failure("invalid", `The reference is not a ${kind} in the bound Craft space.`, `Resolve the ${kind} in this space first.`, [ref]);
-    const listed = await listDocuments(folderId);
+    // A miss refreshes the folder tree once: a subfolder created since the last listing may hold the document.
+    let listed = await listDocuments(folderId);
+    if (listed.ok && !listed.value.some(row => row.id.toLowerCase() === ref.id.toLowerCase())) listed = await listDocuments(folderId, true);
     if (!listed.ok) return listed;
     if (!listed.value.some(row => row.id.toLowerCase() === ref.id.toLowerCase())) return failure("not-found", `No ${kind} document with this ID is in the ${kind} location.`, `List ${kind}s to find the current documents.`, [ref]);
     const block = await ctx.readBlock(ref.id, 1);
@@ -147,7 +170,8 @@ export function createDocumentOperations(ctx: CraftContext, collections: ReturnT
         const folder = await folderOf(role); if (!folder.ok) return folder;
         const id = locator.match(UUID)?.[0];
         if (!id) return failure("invalid", "The locator contains no Craft block ID.", "Pass a document root ID or a Craft link that includes blockId.");
-        const listed = await listDocuments(folder.value); if (!listed.ok) return listed;
+        let listed = await listDocuments(folder.value); if (!listed.ok) return listed;
+        if (!listed.value.some(item => item.id.toLowerCase() === id.toLowerCase())) { listed = await listDocuments(folder.value, true); if (!listed.ok) return listed; }
         const row = listed.value.find(item => item.id.toLowerCase() === id.toLowerCase());
         if (!row) return failure("not-found", `No ${kind} document with this ID is in the ${kind} location.`, `List ${kind}s to find the current documents.`);
         return { ok: true, value: { kind, scope: scoped.value.id, id: row.id } as R, limits: [] };

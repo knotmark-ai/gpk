@@ -4,6 +4,14 @@ All notable changes to GPK will be documented here.
 
 ## Unreleased
 
+- Fix: pages with more than 50 top-level blocks were read only to the 50th,
+  because Craft puts the child cursor beside `data`; every read now follows it.
+- Fix: documents in subfolders of Sources, Wikis and Outputs were not
+  recognized, because Craft's folder listing is not recursive; GPK now expands
+  the folder tree and lists all folders in one batched request.
+- Dated open-state Task queries use Craft's `active`/`upcoming` scopes instead
+  of the full listing of every completed Task.
+- Single-paragraph body edits are sent as one `blocks update --json` request.
 - Performance: Area and Project operations cache Collection membership instead
   of reading the whole table on every call; Source/Wiki/Output text queries use
   folder-scoped Craft search and now match bodies; incoming links are found by

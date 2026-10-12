@@ -205,7 +205,22 @@ function fakeCraft() {
     status: async () => ({ endpoint: "fake", secretStore: "memory", registered: true, tokens: "verified", space: SPACE }),
     authorize: async () => ({ ok: true, value: { state: "authorized", space: SPACE }, limits: [] }),
     close: async () => undefined,
+    // Craft returns at most 50 direct children per `blocks get`, with the cursor beside `data`.
     async read(command) {
+      const paged = command.match(/^(blocks get (?:--id|--date) \S+ --depth -?\d+ --format json(?: --fetchMetadata)?)(?: --cursor (\d+):\S+)?$/);
+      if (!paged) return connection.readFull(command);
+      const full = await connection.readFull(paged[1]);
+      if (!full.ok) return full;
+      const parsed = JSON.parse(full.value);
+      const block = parsed.data?.[0];
+      if (!block?.content || block.content.length <= 50 && !paged[2]) return full;
+      const offset = Number(paged[2] ?? 0);
+      const all = block.content;
+      block.content = all.slice(offset, offset + 50);
+      if (offset + 50 < all.length) parsed.nextCursor = `${offset + 50}:${block.id}`;
+      return { ok: true, value: JSON.stringify(parsed), limits: [] };
+    },
+    async readFull(command) {
       calls.push(["read", command]);
       if (command.includes("; ")) {
         const parts = [];
@@ -270,6 +285,12 @@ function fakeCraft() {
         const c = collections.get(m[1]);
         if (!c) return { ok: false, error: { code: "invalid", message: "Failed to read block: not found", affected: [], next: "" } };
         return { ok: true, value: JSON.stringify({ data: [{ id: c.id, type: "collection", markdown: c.name, items: (c.rows ?? []).map(row => ({ ...rowJson(row, 0), contentPreviewMd: "" })) }] }), limits: [] };
+      }
+      if (command === "tasks list --scope active" || command === "tasks list --scope upcoming") {
+        const today = new Intl.DateTimeFormat("en-CA", { timeZone: SPACE.timezone }).format(new Date());
+        const open = [...tasks.values()].filter(t => t.state !== "done" && t.state !== "canceled" && t.scheduleDate);
+        const chosen = command.endsWith("active") ? open.filter(t => t.scheduleDate <= today) : open.filter(t => t.scheduleDate > today);
+        return { ok: true, value: listing(command.split(" ").at(-1), chosen), limits: [] };
       }
       if (command === "tasks list --scope inbox") return { ok: true, value: listing("inbox", [...tasks.values()].filter(t => t.container.kind === "inbox")), limits: [] };
       if ((m = command.match(/^blocks get --date (\d{4}-\d{2}-\d{2}) --format json --depth 0$/))) {
@@ -413,7 +434,15 @@ function fakeCraft() {
         return { ok: false, error: { code: "not-found", message: "Failed", affected: [], next: "" } };
       }
       if ((m = command.match(/^blocks update --json '(.*)'$/))) {
-        const payload = JSON.parse(m[1]); const task = tasks.get(payload.id);
+        const payload = JSON.parse(m[1]);
+        if (Array.isArray(payload)) {
+          // Craft rejects the whole array when any markdown would yield several blocks.
+          if (payload.some(update => /\n\s*\n/.test(update.markdown ?? ""))) return { ok: false, error: { code: "invalid", message: "error(MARKDOWN_PARSING_ERROR): Expected markdown to yield a single block", affected: [], next: "" } };
+          for (const update of payload) { const r = await connection.write(`blocks update --id ${update.id} --markdown ${JSON.stringify(update.markdown)}`); if (!r.ok) return r; }
+          connection.jsonBatches = (connection.jsonBatches ?? 0) + 1;
+          return { ok: true, value: `Updated ${payload.length} blocks.`, limits: [] };
+        }
+        const task = tasks.get(payload.id);
         if ("scheduleDate" in payload.taskInfo) task.scheduleDate = payload.taskInfo.scheduleDate ?? undefined; touch(task);
         return { ok: true, value: `Updated block <${task.id}>.`, limits: [] };
       }
@@ -767,6 +796,43 @@ function fakeCraft() {
   assert.ok(!fake.calls.slice(callsBeforeLinks).some(([, c]) => c.includes(unrelated.value.created.id)), "documents that do not mention the target are not read");
   assert.ok(viaSearch.limits.some(l => /searching the target's title/.test(l)));
   assert.deepEqual((await knowledge.sources.query({ text: "Nothing links" })).value.items.map(i => i.ref.id), [unrelated.value.created.id], "text queries match bodies through search");
+  // Long pages: Craft pages direct children at 50; every page is read.
+  const longWiki = await knowledge.wikis.create({ title: "Long wiki", content: Array.from({ length: 60 }, (_, i) => `Paragraph ${i}`).join("\n\n") }, { grant: wikiGrant });
+  assert.equal(longWiki.ok, true, JSON.stringify(longWiki));
+  const longRead = await knowledge.wikis.read(longWiki.value.created);
+  assert.ok(longRead.value.value.content.endsWith("Paragraph 59"), "children beyond the first 50 are read");
+  const lateEdit = await knowledge.wikis.update(longWiki.value.created, { edits: [{ before: "Paragraph 57", after: "Paragraph 57 revised" }] }, { grant: wikiGrant, expected: longRead.value.version });
+  assert.equal(lateEdit.value.verified, true, "an edit past the 50th block finds and verifies its block");
+  const lateLink = await knowledge.links.add({ from: longWiki.value.created, to: sourceRef, context: "Cited at the end" }, { grant: wikiGrant });
+  assert.equal(lateLink.value.verified, true, "a link appended after 60 blocks is read back");
+  assert.ok((await knowledge.links.query(sourceRef)).value.items.some(l => l.from.id === longWiki.value.created.id), "incoming links past the 50th block are found");
+
+  // Subfolders: Craft's folder listing is not recursive, so GPK expands the tree.
+  const subfolder = fake.seedFolder("Papers", 1, layoutLocations.source.id);
+  const nestedId = "bbbbbbbb-0000-0000-0000-000000000001";
+  fake.documents.set(nestedId, { title: "Nested paper", folderId: subfolder.id, location: "folder", body: [{ id: "bbbbbbbb-0000-0000-0000-000000000002", type: "text", markdown: "In a subfolder." }] });
+  assert.equal((await knowledge.sources.resolve(nestedId)).ok, true, "a document in a subfolder of Sources is a Source");
+  assert.deepEqual((await knowledge.sources.read({ kind: "Source", scope: SPACE.id, id: nestedId })).value.value.title, "Nested paper");
+
+  // Dated open-state queries skip the full listing of every completed Task.
+  const fullListings = () => fake.calls.filter(([, c]) => c === "tasks list --scope all").length;
+  const beforeScoped = fullListings();
+  const dated = await knowledge.tasks.query({ states: ["todo", "doing", "waiting"], time: { from: "2026-01-01", to: "2030-12-31" } });
+  assert.equal(dated.ok, true, JSON.stringify(dated));
+  assert.equal(fullListings(), beforeScoped, "the active/upcoming scopes replace the full listing");
+  const viaAll = await knowledge.tasks.query({ states: ["todo", "doing", "waiting"], time: { from: "2026-01-01", to: "2030-12-31", includeUnset: true } });
+  const datedIds = viaAll.value.items.filter(i => i.value.time).map(i => i.ref.id).sort();
+  assert.deepEqual(dated.value.items.map(i => i.ref.id).sort(), datedIds, "the scoped path returns the same dated Tasks as the full listing");
+  assert.ok(fullListings() > beforeScoped, "including undated Tasks still needs the full listing");
+
+  // Several single-paragraph edits go out as one JSON update; a multi-paragraph edit stays separate.
+  const batchesBefore = fake.connection.jsonBatches ?? 0;
+  const twoEdits = await knowledge.wikis.update(longWiki.value.created, { edits: [{ before: "Paragraph 31", after: "Paragraph thirty-one" }, { before: "Paragraph 32", after: "Paragraph thirty-two" }] }, { grant: wikiGrant });
+  assert.equal(twoEdits.ok, true, JSON.stringify(twoEdits)); assert.equal(twoEdits.value.verified, true);
+  assert.equal((fake.connection.jsonBatches ?? 0) - batchesBefore, 1, "single-paragraph edits share one request");
+  const split = await knowledge.wikis.update(longWiki.value.created, { edits: [{ before: "Paragraph 43", after: "Paragraph forty-three\n\nInserted after forty-three" }, { before: "Paragraph 44", after: "Paragraph forty-four" }] }, { grant: wikiGrant });
+  assert.equal(split.ok, true, JSON.stringify(split));
+  assert.ok((await knowledge.wikis.read(longWiki.value.created)).value.value.content.includes("Paragraph forty-three\n\nInserted after forty-three\n\nParagraph forty-four"), "a paragraph break inserts a sibling block");
   console.log("PASS: Sources, Wikis and Outputs are folder documents; links live in record bodies; checkpoints in the GPK System page");
 
   // A dedicated workspace: the default plan puts everything at the top level.

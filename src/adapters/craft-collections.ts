@@ -49,6 +49,8 @@ export type CraftContext = {
   hostRoot(): Promise<Result<string | null>>;
   /** A Task's grant container (inbox, Daily Note, Project row or document). */
   taskContainer(ref: TaskRef): Promise<Result<{ key: string; kind: string; projectId?: string }>>;
+  /** A folder and all its descendants (Craft's folder listing is not recursive). */
+  folderWithDescendants(folderId: string, refresh?: boolean): Promise<Result<string[]>>;
   /** IDs linked to or from an endpoint, for relatedTo predicates; set once the link module exists. */
   relatedIds?: (ref: Ref & { kind: string }) => Promise<Result<{ ids: Set<string>; limits: string[] }>>;
 };
@@ -120,7 +122,7 @@ export function createCollectionOperations(ctx: CraftContext) {
     const items: ListedItem[] = [];
     let cursor: string | undefined;
     for (let page = 0; page < 20; page++) {
-      const read = await ctx.readJson<{ data?: CraftBlock[] }>(`blocks get --id ${collectionId} --format json --depth 1${cursor ? ` --cursor ${cursor}` : ""}`);
+      const read = await ctx.readJson<{ data?: CraftBlock[]; nextCursor?: string }>(`blocks get --id ${collectionId} --format json --depth 1${cursor ? ` --cursor ${cursor}` : ""}`);
       if (!read.ok) return read;
       const block = read.value.data?.[0];
       if (!block || block.type !== "collection") return failure("invalid", "The configured location is not a Collection.", "Rerun Setup to repair the layout.");
@@ -132,7 +134,8 @@ export function createCollectionOperations(ctx: CraftContext) {
         if (areaId) entry.areaId = areaId;
         items.push(entry);
       }
-      cursor = block.nextCursor;
+      // Craft puts the paging cursor beside `data`; items have arrived in one response so far.
+      cursor = read.value.nextCursor ?? block.nextCursor;
       if (!cursor) break;
     }
     members.set(collectionId.toLowerCase(), new Set(items.map(item => item.id.toLowerCase())));

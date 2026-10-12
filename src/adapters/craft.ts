@@ -117,8 +117,12 @@ const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 20;
 /** `tasks list --scope all` pages 1000 tasks; this bounds a full-space scan. */
 const MAX_LISTING_PAGES = 25;
-/** `blocks get` commands batched per craft_read call. */
+/** `blocks get` commands batched per craft_read call; a batch counts as one request against Craft's rate limit. */
 const READ_BATCH = 20;
+/** How long a folder tree listing is reused. */
+const FOLDER_TREE_TTL_MS = 60_000;
+/** Child pages of 50 followed for one block before giving up. */
+const MAX_CHILD_PAGES = 100;
 
 const TRANSITIONS: Record<TaskState, TaskState[]> = {
   todo: ["doing", "waiting", "done", "canceled"],
@@ -238,17 +242,42 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
     catch { return failure("unavailable", "Craft returned a non-JSON payload for a JSON read.", "Retry; if it persists the connector surface changed."); }
   }
 
-  /** Any block with metadata; `not-found` when Craft cannot read the ID. */
+  /**
+   * `blocks get` returns at most 50 direct children per call; the cursor for the rest
+   * is a top-level `nextCursor` beside `data`. Append every following page so callers
+   * always see the whole body (verified 2026-10-12; without this a long page was cut).
+   */
+  async function appendChildPages(block: CraftBlock, command: string, cursor: string | undefined): Promise<Result<CraftBlock>> {
+    for (let page = 0; cursor; page++) {
+      if (page >= MAX_CHILD_PAGES) return failure("unavailable", `The block has more than ${MAX_CHILD_PAGES * 50} direct children.`, "Split the page; GPK reads at most that many blocks of one page.");
+      const next = await readJson<{ data?: CraftBlock[]; nextCursor?: string }>(`${command} --cursor ${cursor}`);
+      if (!next.ok) return next;
+      (block.content ??= []).push(...(next.value.data?.[0]?.content ?? []));
+      cursor = next.value.nextCursor;
+    }
+    return { ok: true, value: block, limits: [] };
+  }
+
+  /** A whole page (all children pages) from one `blocks get` target, e.g. `--id X` or `--date D`. */
+  async function readWhole(target: string, depth: number, metadata = true): Promise<Result<CraftBlock | null>> {
+    const command = `blocks get ${target} --depth ${depth} --format json${metadata ? " --fetchMetadata" : ""}`;
+    const read = await readJson<{ data?: CraftBlock[]; nextCursor?: string }>(command);
+    if (!read.ok) return read;
+    const block = read.value.data?.[0];
+    if (!block) return { ok: true, value: null, limits: [] };
+    return appendChildPages(block, command, read.value.nextCursor);
+  }
+
+  /** Any block with metadata and all its direct children; `not-found` when Craft cannot read the ID. */
   async function readBlock(id: string, depth: number): Promise<Result<CraftBlock>> {
-    const read = await readJson<{ data?: CraftBlock[] }>(`blocks get --id ${id} --depth ${depth} --format json --fetchMetadata`);
+    const read = await readWhole(`--id ${id}`, depth);
     if (!read.ok) {
       return read.error.code === "not-found" || read.error.code === "invalid"
         ? failure("not-found", "No block with this ID is readable in the space.", "Re-resolve the reference; it may have been deleted.")
         : read;
     }
-    const block = read.value.data?.[0];
-    if (!block) return failure("not-found", "No block with this ID is readable in the space.", "Re-resolve the reference; it may have been deleted.");
-    return { ok: true, value: block, limits: [] };
+    if (!read.value) return failure("not-found", "No block with this ID is readable in the space.", "Re-resolve the reference; it may have been deleted.");
+    return { ok: true, value: read.value, limits: [] };
   }
 
   /** One craft_read call carrying several `blocks get` commands; results are blank-line separated. Unreadable IDs are absent. */
@@ -258,11 +287,20 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
       const batch = ids.slice(start, start + READ_BATCH);
       const result = await connection.read(batch.map(id => `blocks get --id ${id} --depth ${depth} --format json --fetchMetadata`).join("; "));
       if (!result.ok) return result;
+      const paged: { block: CraftBlock; cursor: string }[] = [];
       for (const segment of result.value.split(/\n\s*\n(?=\{)/)) {
         try {
-          const block = (JSON.parse(segment.trim()) as { data?: CraftBlock[] }).data?.[0];
-          if (block) blocks.set(block.id.toLowerCase(), block);
+          const parsed = JSON.parse(segment.trim()) as { data?: CraftBlock[]; nextCursor?: string };
+          const block = parsed.data?.[0];
+          if (!block) continue;
+          blocks.set(block.id.toLowerCase(), block);
+          if (parsed.nextCursor) paged.push({ block, cursor: parsed.nextCursor });
         } catch { /* a failed segment leaves its block unreadable */ }
+      }
+      // Long pages finish one by one; most pages fit in the first 50 children.
+      for (const { block, cursor } of paged) {
+        const whole = await appendChildPages(block, `blocks get --id ${block.id} --depth ${depth} --format json --fetchMetadata`, cursor);
+        if (!whole.ok) blocks.delete(block.id.toLowerCase());
       }
     }
     return { ok: true, value: blocks, limits: [] };
@@ -354,10 +392,15 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
     for (const task of tasksSeen) if (task.container.key !== "unknown") containerHints.set(task.id.toLowerCase(), task.container);
   }
 
-  /** Follow the listing's pagination; `complete` is false when the page cap was hit. */
-  async function listAll(): Promise<Result<{ tasks: ListedTask[]; complete: boolean }>> {
+  /**
+   * Follow a task listing's pagination; `complete` is false when the page cap was hit.
+   * `all` is every task block in every state; `active` (open, dated up to today) and
+   * `upcoming` (open, dated from tomorrow) skip completed tasks but also every open
+   * task without a date, including Daily Note Tasks whose date was cleared.
+   */
+  async function listAll(scope: "all" | "active" | "upcoming" = "all"): Promise<Result<{ tasks: ListedTask[]; complete: boolean }>> {
     const tasksSeen: ListedTask[] = [];
-    let command = "tasks list --scope all";
+    let command = `tasks list --scope ${scope}`;
     for (let page = 0; page < MAX_LISTING_PAGES; page++) {
       const listing = await connection.read(command);
       if (!listing.ok) {
@@ -368,7 +411,7 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
       const parsed = parseTaskListing(listing.value);
       remember(parsed);
       tasksSeen.push(...parsed);
-      const next = listing.value.match(/^Next page: (tasks list --scope all --cursor \S+)\s*$/m)?.[1];
+      const next = listing.value.match(/^Next page: (tasks list --scope \w+ --cursor \S+)\s*$/m)?.[1];
       if (!next) return { ok: true, value: { tasks: tasksSeen, complete: true }, limits: [] };
       command = next;
     }
@@ -469,10 +512,26 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
     return { ok: true, value: plans, limits: [] };
   }
 
-  /** Write planned edits block by block; the rendered list prefix is stripped so indentation survives. */
+  /**
+   * Write planned edits; the rendered list prefix is stripped so list style and
+   * indentation survive. Single-paragraph edits go out in one `blocks update --json`
+   * array (one request; Craft rejects the whole array if any item would split into
+   * several blocks, so multi-paragraph edits stay separate `--markdown` updates,
+   * which insert the extra paragraphs as siblings).
+   */
   async function writeEdits(plans: Map<string, string>): Promise<Result<void>> {
+    const single: { id: string; markdown: string }[] = [];
+    const multi: { id: string; markdown: string }[] = [];
     for (const [id, text] of plans) {
-      const written = await connection.write(`blocks update --id ${id} --markdown ${JSON.stringify(text.replace(LINE_PREFIX, ""))}`);
+      const markdown = text.replace(LINE_PREFIX, "");
+      (/\n\s*\n/.test(markdown) ? multi : single).push({ id, markdown });
+    }
+    if (single.length > 1) {
+      const written = await connection.write(`blocks update --json '${jsonArgument(single)}'`);
+      if (!written.ok) return written;
+    } else if (single.length === 1) multi.unshift(single[0]!);
+    for (const { id, markdown } of multi) {
+      const written = await connection.write(`blocks update --id ${id} --markdown ${JSON.stringify(markdown)}`);
       if (!written.ok) return written;
     }
     return { ok: true, value: undefined, limits: [] };
@@ -482,6 +541,14 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
     connection, backendId, space, readJson, readBlock, readBlocks, digestOf, bodyOf, authorizeRoot, planEdits, writeEdits,
     layout: async () => options.layout ? options.layout() : { ok: true, value: null, limits: [] },
     today: () => todayIn(spaceCache?.timezone ?? "UTC"),
+    async folderWithDescendants(folderId, refresh) {
+      if (refresh) folderTreeCache = null;
+      const tree = await folderTree();
+      if (!tree.ok) return tree;
+      const ids = [folderId];
+      for (let i = 0; i < ids.length; i++) for (const folder of tree.value) if (folder.parentId?.toLowerCase() === ids[i]!.toLowerCase()) ids.push(folder.id);
+      return { ok: true, value: ids, limits: [] };
+    },
     hostRoot: async () => { const host = await projectsHost(); return host.ok ? { ok: true, value: host.value?.rootId ?? null, limits: [] } : host; },
     taskContainer: ref => containerOf(ref),
   };
@@ -550,7 +617,31 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
           return listed;
         });
       } else {
-        const all = await listAll();
+        // A dated window over open states needs no completed or undated Task, so the
+        // active/upcoming scopes replace the full listing (which carries every completed
+        // Task in the space). Anything else still needs the full listing.
+        const openOnly = Boolean(query.states?.length) && query.states!.every(state => state === "todo" || state === "doing" || state === "waiting");
+        const datedWindow = Boolean(query.time) && !query.time!.includeUnset;
+        let all: Result<{ tasks: ListedTask[]; complete: boolean }>;
+        if (openOnly && datedWindow) {
+          const today = todayIn(scoped.value.timezone);
+          const needActive = !query.time!.from || query.time!.from <= today;
+          const needUpcoming = !query.time!.to || query.time!.to > today;
+          const parts = [needActive ? await listAll("active") : null, needUpcoming ? await listAll("upcoming") : null].filter(Boolean) as Result<{ tasks: ListedTask[]; complete: boolean }>[];
+          const failed = parts.find(part => !part.ok);
+          if (failed) return failed as Result<never>;
+          const seen = new Set<string>();
+          const merged: ListedTask[] = [];
+          let complete = true;
+          for (const part of parts as { ok: true; value: { tasks: ListedTask[]; complete: boolean } }[]) {
+            complete &&= part.value.complete;
+            for (const task of part.value.tasks) if (!seen.has(task.id.toLowerCase())) { seen.add(task.id.toLowerCase()); merged.push(task); }
+          }
+          all = { ok: true, value: { tasks: merged, complete }, limits: [] };
+          limits.push("Open dated Tasks came from Craft's active/upcoming task scopes.");
+        } else {
+          all = await listAll();
+        }
         if (!all.ok) return all;
         limits.push("Discovery uses the space-wide task listing, which is not a transactional snapshot.");
         if (!all.value.complete) limits.push(`Only the first ${MAX_LISTING_PAGES} listing pages were scanned.`);
@@ -831,9 +922,9 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
       }
       const date = surface.id.match(/^daily-notes\/(\d{4}-\d{2}-\d{2})$/)?.[1];
       if (!date) return failure("invalid", "Unknown capture surface.", "Resolve the surface first.");
-      const read = await readJson<{ data?: CraftBlock[] }>(`blocks get --date ${date} --format json --depth 1`);
+      const read = await readWhole(`--date ${date}`, 1, false);
       if (!read.ok) return read;
-      const root = read.value.data?.[0];
+      const root = read.value;
       if (!root) return failure("not-found", `No Daily Note exists for ${date}.`, "Choose a date with a Daily Note.");
       const items = (root.content ?? []).map(child => ({
         ref: { scope: scoped.value.id, id: child.id, role: "capture" as const, surface },
@@ -918,6 +1009,14 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
     // Later pages repeat ancestor rows for context; keep the first occurrence of each ID.
     const seen = new Set<string>();
     return { ok: true, value: folders.filter(folder => !seen.has(folder.id) && seen.add(folder.id)), limits: [] };
+  }
+  /** The folder tree, reused for a minute so repeated listings do not page through it again. */
+  let folderTreeCache: { at: number; value: LayoutInspection["candidates"]["folders"] } | null = null;
+  async function folderTree(): Promise<Result<LayoutInspection["candidates"]["folders"]>> {
+    if (folderTreeCache && Date.now() - folderTreeCache.at < FOLDER_TREE_TTL_MS) return { ok: true, value: folderTreeCache.value, limits: [] };
+    const listed = await listFolders();
+    if (listed.ok) folderTreeCache = { at: Date.now(), value: listed.value };
+    return listed;
   }
   const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
