@@ -159,7 +159,7 @@ function compileMcp() {
     bundle: true, platform: "node", format: "esm", target: "node22.13",
     write: false, metafile: true, legalComments: "eof",
     // Bundled entity templates ship inside the runtime for Craft's Templates area.
-    loader: { ".md": "text" },
+    loader: { ".md": "text", ".html": "text" },
     define: { GPK_VERSION: JSON.stringify(metadata.version) },
     banner: { js: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);' },
   });

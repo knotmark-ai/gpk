@@ -27,7 +27,7 @@ user's configured personal template for this role, then that role's bundled defa
 only when no personal template is configured. Settings has a named binding for each
 role: null means no personal override; it does not mean a configured target is missing.
 A one-off override does not change the configured
-default. Use the requested language, then confirmed configured language, then en
+default. Use the requested language, then the configured metadata language, then en
 when neither is known; the two bundled files are language
 variants of the same role's default. Do not replace a configured personal template with
 one of them because its content is inaccessible. With no connection, a requested

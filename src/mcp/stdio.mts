@@ -6,7 +6,7 @@ declare const GPK_VERSION: string;
 
 // stdout is reserved for MCP. Do not print input, credentials or exception stacks.
 const runtime = bootstrap();
-const handle = serveStdio(() => createGpkServer(runtime.operations, GPK_VERSION), {
+const handle = serveStdio(() => createGpkServer(runtime.operations, GPK_VERSION, runtime.onboarding), {
   legacy: "serve",
   onerror: () => process.stderr.write("GPK MCP transport error.\n"),
 });

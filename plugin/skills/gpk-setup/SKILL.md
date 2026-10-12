@@ -1,88 +1,54 @@
 ---
 name: gpk-setup
-description: Use for GPK onboarding, readiness checks, Craft authorization, layout setup (Collections and folders), grants and Settings preferences. Establishes the control root and the Craft structures through the GPK MCP tools after the user confirms the plan.
+description: Use for GPK onboarding, readiness checks, reconnecting Craft, changing languages or permissions, and whenever runtime status reports onboarding required. Opens GPK's local onboarding page, where the user connects Craft, creates the workspace structure and chooses permissions.
 ---
 
 # GPK Setup
 
 Follow the [MCP invocation guide](../../guides/mcp.md) for tool discovery and
-result handling. Setup is the only workflow that writes Settings and grants;
-it never writes knowledge records.
+result handling. Setup happens on GPK's onboarding page in the user's browser,
+not in the conversation: the user connects Craft, chooses a dedicated or
+shared workspace, the working and metadata languages and the names, and ticks
+the permissions GPK gets. The page writes `settings.json` and `grants.json`;
+no tool lets you write them, and you must not claim the user's consent for them.
 
-## 1. Inspect before proposing
+## 1. Check readiness
 
-Call `gpk_setup_inspect`. It reports the control root, whether Settings are
-`uninitialized`, `ready`, `invalid` or `unavailable`, the Craft authorization
-state, the configured layout's validity, the number of grants, and (once Craft
-is authorized) the Collections and folders that already exist. Read it fully:
-an `invalid` Settings file is a repair conversation, not a reinitialization.
+Call `gpk_runtime_status`. `onboarding: "complete"` means Settings exist and
+permissions were granted; go back to the user's request. Otherwise continue.
+An `invalid` Settings file is a repair conversation: say which file and what
+is wrong, and do not open the page over it.
 
-## 2. Authorize Craft once
+## 2. Open the onboarding page
 
-If `connection.tokens` is `none`, call `gpk_connection_authorize`. Show the
-returned URL, ask the user to open it, pick the space and approve "GPK", then
-poll `gpk_connection_status` until `tokens` is `verified` and `space` is set.
-GPK is its own Craft connection; the host's Craft connector is irrelevant.
+Call `gpk_setup_open`. It opens the page in the user's browser and returns its
+URL. If `opened` is false, show the URL and ask the user to open it. Tell the
+user in one or two sentences what the page asks for:
 
-## 3. Propose the layout and get one confirmation
+- connect Craft and pick the workspace for GPK (a new, dedicated workspace is
+  the recommended choice);
+- working language (conversation and what GPK writes into records) and
+  metadata language (folder, Collection and view names, template headings);
+- which operations GPK may perform where. Deleting, archiving and restoring
+  are never offered.
 
-GPK works best in a Craft workspace dedicated to it. Ask whether this one is;
-the inspection helps: a new workspace shows only Craft's own sample folder
-(`How to use Craft`) and no Collections.
+Then wait for the user to say they are done. Do not poll in a tight loop.
 
-- **Dedicated workspace (default):** everything at the top level. A host
-  document `GPK` holds the Areas and Projects Collections, and the Sources,
-  Wikis and Outputs folders sit at the root. Omit `namespace` (or pass
-  `"root"`).
-- **Shared workspace:** pass `namespace: {"folder": "GPK"}` so one folder holds
-  the host document and the three folders and nothing the user already has is
-  touched.
+## 3. Read back and report
 
-In both cases the bundled entity templates are installed into Craft's
-Templates area and the Collections get Board, By Area and Active views.
-Propose exactly that unless the user asks for something else.
-
-Adoption of existing structures happens only when the user names them. The
-inspection lists existing folders (with document counts and parents) and
-Collections so the user can point at one; do not recommend adoption yourself.
-When the user does adopt:
-
-- A Collection qualifies only if the inspection shows the expected `Status`
-  column (Projects also need a relation column); otherwise create by name.
-- A folder is adopted by ID; its contents become that role's recognized
-  material without being moved or edited. Everything outside the configured
-  locations stays read-only for GPK.
-- A name clash among siblings is refused, not merged.
-- Preferences: language (also selects the template language) and timezone if
-  the user states them.
-
-Present the plan in one message and wait for the user's confirmation. Then call
-`gpk_setup_establish` with exactly that plan. It creates or adopts the
-structures, verifies them, and initializes Settings (or updates the layout when
-Settings exist). A `partial` result lists created references: keep them and
-rerun with those IDs adopted rather than creating duplicates.
-
-## 4. Propose grants and get one confirmation
-
-Call `gpk_setup_propose_grants`. It returns the default non-destructive set:
-Task operations on Daily Notes and Inbox, Project and Area operations on their
-Collections, create/update on the three folders, plus link additions. Show the
-list in plain words, ask for one confirmation, then pass the confirmed list to
-`gpk_grants_grant`. Add destructive operations (`remove`, `archive`, `restore`)
-or `unattended: true` only when the user asks for them explicitly.
-
-## 5. Read back and report separately
-
-Call `gpk_setup_inspect` again and report three things on their own lines:
-control root readiness (Settings written and read back), Craft readiness
-(authorized space, layout verified), and grants (count and roots). Say what
-was created versus adopted, which views exist, and that the `GPK …` templates
-are available in Craft's Templates area for creating entities by hand. Do not
-claim onboarding is complete while any of the three is missing.
+Call `gpk_setup_inspect` and report, each on its own line: Settings written
+(control root), Craft connected (workspace name) with every layout location
+`ok`, and the number of grants. If anything is missing, say what and offer to
+open the page again. Do not report onboarding as complete while
+`gpk_runtime_status` still says `required`.
 
 ## Later changes
 
-Preferences change through `gpk_settings_update` with the `version` from
-`gpk_settings_read` as `expected`. Grants are revoked with `gpk_grants_revoke`.
-Layout changes rerun `gpk_setup_establish` with the new plan. Templates and
-automatic ingestion are not implemented; say so when asked.
+- Working language, timezone and instructions: `gpk_settings_update` with the
+  `version` from `gpk_settings_read` as `expected`, or the page.
+- Permissions: the user adds them on the page; you may revoke one with
+  `gpk_grants_revoke` when asked.
+- Reconnecting Craft after an `unauthorized` failure: open the page again.
+- Layout and metadata language are fixed after the structure exists; changing
+  them means resetting GPK. Personal templates and automatic ingestion are not
+  implemented; say so when asked.

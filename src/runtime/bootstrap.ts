@@ -7,6 +7,22 @@ import type { Failure, Result } from "../domain/operation-types.js";
 import type { KnowledgeBackendConfiguration, KnowledgeLayout, UserControlPort, UserSettings } from "../domain/user-control-port.js";
 export type { KnowledgeConnection };
 import { createOperations, type KnowledgeBinding } from "./operations.js";
+import { createOnboarding } from "../onboarding/server.js";
+import { spawn } from "node:child_process";
+
+/** Open a URL in the user's default browser; resolves false when no opener ran. */
+export function openBrowser(url: string): Promise<boolean> {
+  const [command, args] = process.platform === "darwin" ? ["open", [url]]
+    : process.platform === "win32" ? ["cmd", ["/c", "start", "", url]]
+    : ["xdg-open", [url]];
+  return new Promise(resolve => {
+    try {
+      const child = spawn(command, args as string[], { stdio: "ignore", detached: true });
+      child.once("error", () => resolve(false));
+      child.once("spawn", () => { child.unref(); resolve(true); });
+    } catch { resolve(false); }
+  });
+}
 import type { KnowledgeConnection } from "../domain/user-control-port.js";
 
 /**
@@ -22,6 +38,8 @@ export type BootstrapOptions = {
   env?: NodeJS.ProcessEnv;
   secrets?: SecretStore;
   createConnection?: typeof createCraftConnection;
+  /** Opens the onboarding page; tests replace it so no browser starts. */
+  openBrowser?: (url: string) => Promise<boolean>;
 };
 
 export const DEFAULT_CRAFT_ENDPOINT = "https://mcp.craft.do/my/mcp";
@@ -88,7 +106,7 @@ export function bootstrap(options: BootstrapOptions = {}) {
   async function binding(): Promise<Result<KnowledgeBinding>> {
     const settings = await control.settings.read();
     if (!settings.ok) return settings;
-    if (settings.value === null) return failure("unavailable", `Settings are not initialized in ${controlRoot}.`, "Run Setup (gpk_setup_establish) before using knowledge operations.");
+    if (settings.value === null) return failure("unavailable", `GPK is not set up in ${controlRoot}.`, "Call gpk_setup_open and let the user finish onboarding in the browser.");
     const configuration = activeConfiguration(settings.value.value);
     if (!configuration.ok) return configuration;
     const config = configuration.value;
@@ -105,9 +123,12 @@ export function bootstrap(options: BootstrapOptions = {}) {
   }
 
   const operations = createOperations({ controlRoot, control, binding, setupBinding });
+  const onboarding = createOnboarding({ operations, openBrowser: options.openBrowser ?? openBrowser });
   return {
     operations,
+    onboarding,
     async close() {
+      await onboarding.close();
       await Promise.all([...connections.values()].map(entry => entry.connection.close().catch(() => undefined)));
     },
   };

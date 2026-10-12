@@ -41,8 +41,10 @@ export type ConnectionStatus = {
 
 export interface CraftConnection {
   status(): Promise<ConnectionStatus>;
-  /** Start or complete authorization. Pending results carry the URL the user must open. */
-  authorize(): Promise<Result<{ state: "authorized" | "pending"; authorizationUrl?: string; space?: CraftSpace }>>;
+  /** Start or complete authorization. Pending results carry the URL the user must open;
+   * `returnTo` is where the browser goes after Craft redirects back (the onboarding page).
+   */
+  authorize(returnTo?: string): Promise<Result<{ state: "authorized" | "pending"; authorizationUrl?: string; space?: CraftSpace }>>;
   /** Run one craft_read command and return its text. */
   read(command: string): Promise<Result<string>>;
   /** Run one craft_write command and return its text. */
@@ -156,22 +158,23 @@ export function createCraftConnection(options: CraftConnectionOptions): CraftCon
   }
 
   function mapError(error: unknown, context: string): Result<never> {
-    if (error instanceof UnauthorizedError) return failure("unauthorized", `Craft has not authorized GPK (${context}).`, "Run the connection authorization and approve GPK in the browser.");
+    if (error instanceof UnauthorizedError) return failure("unauthorized", `Craft has not authorized GPK (${context}).`, "Call gpk_setup_open; the user connects Craft on the onboarding page.");
     if (error instanceof SdkHttpError) {
       const status = (error as { status?: number }).status ?? 0;
-      if (status === 401 || status === 403) return failure("unauthorized", `Craft rejected GPK's credentials (${context}).`, "Re-run the connection authorization; the stored tokens may be revoked.");
+      if (status === 401 || status === 403) return failure("unauthorized", `Craft rejected GPK's credentials (${context}).`, "Call gpk_setup_open and reconnect Craft there; the stored tokens may be revoked.");
       return failure("unavailable", `Craft endpoint error ${status} (${context}).`, "Retry after reading the affected records back; the effect of an interrupted write is unknown.");
     }
     return failure("unavailable", `Craft connection failed (${context}).`, "Check network access to the endpoint and retry after reading affected records back.");
   }
 
-  function waitForCallback(): Promise<URLSearchParams> {
+  function waitForCallback(returnTo?: string): Promise<URLSearchParams> {
     return new Promise((resolve, reject) => {
       const server = http.createServer((request, response) => {
         const url = new URL(request.url ?? "/", redirectUrl);
         if (url.pathname !== "/callback") { response.writeHead(404).end(); return; }
-        response.writeHead(200, { "content-type": "text/plain; charset=utf-8" })
-          .end("GPK: authorization received. You can close this tab.");
+        // Only a loopback page may be a return target, so the callback cannot redirect elsewhere.
+        if (returnTo && /^http:\/\/(127\.0\.0\.1|localhost):\d+\//.test(returnTo)) response.writeHead(302, { location: returnTo }).end();
+        else response.writeHead(200, { "content-type": "text/plain; charset=utf-8" }).end("GPK: authorization received. You can close this tab.");
         server.close();
         if (url.searchParams.get("error")) reject(new Error(url.searchParams.get("error_description") ?? url.searchParams.get("error") ?? "authorization error"));
         else resolve(url.searchParams);
@@ -247,7 +250,7 @@ export function createCraftConnection(options: CraftConnectionOptions): CraftCon
         ...(currentSpace ? { space: currentSpace } : {}),
       };
     },
-    async authorize() {
+    async authorize(returnTo) {
       if (pending) return { ok: true, value: { state: "pending", authorizationUrl: pending.url }, limits: ["An authorization is already waiting for the browser callback."] };
       await load();
       try {
@@ -261,7 +264,7 @@ export function createCraftConnection(options: CraftConnectionOptions): CraftCon
         authorizationError = null;
         const done = (async () => {
           try {
-            const params = await waitForCallback();
+            const params = await waitForCallback(returnTo);
             await waiting.finishAuth(params);
             await waiting.close().catch(() => undefined);
             transport = null;

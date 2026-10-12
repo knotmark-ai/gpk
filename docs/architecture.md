@@ -428,6 +428,33 @@ an extensibility rule, not a requirement to deliver every entrypoint at once.
 
 ## Setup and connection lifecycle
 
+**Onboarding surface (decision of 2026-10-12).** Setup is a web page, not a
+conversation. `gpk_setup_open` starts a server on `127.0.0.1` inside the
+runtime process (`src/onboarding/`) and opens the page in the user's browser.
+The page connects Craft (the OAuth callback returns the browser to it), lets
+the user choose a dedicated or shared workspace, a working and a metadata
+language and the names, creates the structure, and writes the permissions the
+user ticks. Its only products are `settings.json` and `grants.json`.
+
+- **Consent stays with the user.** No MCP tool writes grants or runs layout
+  establishment; the Agent can open the page but cannot confirm it. A grant
+  the page submits must be a subset of the proposal, so the page cannot widen
+  authority either.
+- **Onboarding gates everything.** Until Settings exist and at least one
+  grant is persisted, runtime status reports `onboarding: required` and every
+  knowledge operation's failure names `gpk_setup_open`.
+- **Loopback hardening.** Any website can send requests to `127.0.0.1`, so each
+  page session has a random token (query for the page, header for the API),
+  the server checks Host against DNS rebinding and Origin for writes, accepts
+  only JSON bodies, and stops after 30 idle minutes or with the runtime.
+- **Remote deployment.** The page's handlers call `Operations` only, so a
+  remote GPK serves the same page behind an authenticated session instead of a
+  loopback token; the OAuth callback then moves to the service's public URL.
+- **Languages.** The working language governs conversation and record content;
+  the metadata language governs structural names and template headings. Schema
+  keys (the `Status`/`Area` columns), state values and `#gpk/task/*` tags stay
+  English, so records stay machine-readable whatever either language is.
+
 Setup selects local control before establishing knowledge-backend access. Installing
 the Craft plugin is optional: an existing Craft MCP service endpoint may be used, but its
 host-held session or credentials are not implicitly transferable. Craft documents

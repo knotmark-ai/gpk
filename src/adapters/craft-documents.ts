@@ -55,7 +55,7 @@ export function createDocumentOperations(ctx: CraftContext, collections: ReturnT
   async function layout(): Promise<Result<KnowledgeLayout["locations"]>> {
     const current = await ctx.layout();
     if (!current.ok) return current;
-    if (!current.value) return failure("unavailable", "The layout is not configured.", "Run Setup (gpk_setup_establish) first.");
+    if (!current.value) return failure("unavailable", "The layout is not configured.", "Call gpk_setup_open and let the user finish onboarding in the browser.");
     return { ok: true, value: current.value, limits: [] };
   }
 
@@ -63,7 +63,7 @@ export function createDocumentOperations(ctx: CraftContext, collections: ReturnT
     const current = await layout();
     if (!current.ok) return current;
     const id = current.value[role].id;
-    if (id === "unset") return failure("unavailable", `The ${role} location is not configured.`, "Run Setup (gpk_setup_establish) first.");
+    if (id === "unset") return failure("unavailable", `The ${role} location is not configured.`, "Call gpk_setup_open and let the user finish onboarding in the browser.");
     return { ok: true, value: id, limits: [] };
   }
 
@@ -360,7 +360,7 @@ export function createDocumentOperations(ctx: CraftContext, collections: ReturnT
   // ---------- checkpoints ----------
   async function systemPage(create: boolean): Promise<Result<CraftBlock | null>> {
     const host = await ctx.hostRoot(); if (!host.ok) return host;
-    if (!host.value) return failure("unavailable", "The host document is not configured.", "Run Setup first.");
+    if (!host.value) return failure("unavailable", "The host document is not configured.", "Call gpk_setup_open and let the user finish onboarding in the browser.");
     const root = await ctx.readBlock(host.value, 1); if (!root.ok) return root;
     const existing = (root.value.content ?? []).find(child => child.type === "page" && (child.markdown ?? "").trim() === SYSTEM_TITLE);
     if (existing) { const page = await ctx.readBlock(existing.id, 1); return page.ok ? page : page; }

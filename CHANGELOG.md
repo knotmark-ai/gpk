@@ -4,6 +4,16 @@ All notable changes to GPK will be documented here.
 
 ## Unreleased
 
+- Setup is a local web page. `gpk_setup_open` opens it from the runtime; the
+  user connects Craft, picks a dedicated or shared workspace, languages and
+  names, creates the structure and ticks permissions. The page writes only
+  `settings.json` and `grants.json`. The tools that let the Agent authorize
+  Craft, establish the layout, propose and write grants are removed, so grants
+  exist only by the user's own clicks; until onboarding is complete, runtime
+  status reports `onboarding: required` and every failure points at the page.
+- Split `preferences.language` into `workingLanguage` (conversation and record
+  content) and `metadataLanguage` (folder, Collection and view names, template
+  headings). Schema keys, states and GPK tags stay English.
 - Add `pnpm gpk`, developer commands around a local run: `status`, `reset`
   (token revocation, secret and control-root removal, optional Craft cleanup)
   and `claude` (start Claude Code with the built package). Authorization and

@@ -73,10 +73,20 @@ export type LayoutPlan = {
   sources: { name: string } | { id: string };
   wikis: { name: string } | { id: string };
   outputs: { name: string } | { id: string };
-  /** Create Board / By Area / Active views on created Collections (default true). */
+  /** Language of view names and template headings (default en). Collection and folder
+   * names come from the plan; column names, state values and template titles stay English.
+   */
+  metadataLanguage?: TemplateLanguage;
+  /** Create the Board / By Area / Active views on the Collections (default true). */
   views?: boolean;
-  /** Install the bundled entity templates into Craft's Templates area (default en). */
-  templates?: { language: TemplateLanguage } | false;
+  /** Install the bundled entity templates into Craft's Templates area (default true). */
+  templates?: boolean;
+};
+
+/** View names per metadata language; they are labels for people, matched by name on reruns. */
+const VIEW_NAMES: Record<TemplateLanguage, { board: string; byArea: string; active: string }> = {
+  en: { board: "Board", byArea: "By Area", active: "Active" },
+  "zh-CN": { board: "看板", byArea: "按领域", active: "进行中" },
 };
 export type LayoutEstablishment = {
   locations: KnowledgeLayout["locations"];
@@ -528,7 +538,7 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
       const containers = new Map<string, CraftTaskContainer>();
       if (query.project) {
         // One Project's Tasks come straight from its row; no space-wide listing.
-        if (!host.value) return failure("unavailable", "The Projects Collection is not configured.", "Run Setup first.");
+        if (!host.value) return failure("unavailable", "The Projects Collection is not configured.", "Call gpk_setup_open and let the user finish onboarding in the browser.");
         if (query.project.scope !== scoped.value.id) return failure("invalid", "The Project belongs to another space.", "Resolve the Project in this space.");
         const item = await collectionOps.readItem(query.project, host.value.collectionId, "Project");
         if (!item.ok) return item;
@@ -617,7 +627,7 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
         if (input.project.scope !== scoped.value.id) return failure("invalid", "The Project belongs to another space.", "Resolve the Project in this space.");
         const host = await projectsHost();
         if (!host.ok) return host;
-        if (!host.value) return failure("unavailable", "The Projects Collection is not configured.", "Run Setup first.");
+        if (!host.value) return failure("unavailable", "The Projects Collection is not configured.", "Call gpk_setup_open and let the user finish onboarding in the browser.");
         const granted = await authorizeRoot(guard, "tasks.create", host.value.collectionId, input.project);
         if (!granted.ok) return granted;
         const item = await collectionOps.readItem(input.project, host.value.collectionId, "Project");
@@ -748,7 +758,7 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
         if (project.scope !== ref.scope) return failure("invalid", "The Project belongs to another space.", "Resolve the Project in this space.");
         const host = await projectsHost();
         if (!host.ok) return host;
-        if (!host.value) return failure("unavailable", "The Projects Collection is not configured.", "Run Setup first.");
+        if (!host.value) return failure("unavailable", "The Projects Collection is not configured.", "Call gpk_setup_open and let the user finish onboarding in the browser.");
         if (source.value.kind === "project" && source.value.projectId?.toLowerCase() === project.id.toLowerCase()) return failure("conflict", "The Task already belongs to this Project.", "Nothing to change.", [ref]);
         const granted = await authorizeRoot(guard, "tasks.assignProject", host.value.collectionId, ref);
         if (!granted.ok) return granted;
@@ -1052,6 +1062,8 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
       // adopted Collections alike, so a recovery rerun ends in the same state.
       const limits: string[] = [];
       const views: string[] = [];
+      const metadataLanguage = plan.metadataLanguage ?? "en";
+      const viewNames = VIEW_NAMES[metadataLanguage];
       if (plan.views !== false) {
         const ensure = async (collectionId: string, label: string, wanted: [string, string][]) => {
           const listing = await connection.read(`collections views-list --collection ${collectionId}`);
@@ -1065,19 +1077,18 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
           }
         };
         await ensure(projects.value, "Projects", [
-          ["Board", `collections views-create --collection ${projects.value} --name "Board" --type kanban --group-by Status --column-order "${PROJECT_STATES.join(",")}" --visible-fields "Area" --show-column-colors true`],
-          ["By Area", `collections views-create --collection ${projects.value} --name "By Area" --type table --group '[{"property":"Area","ascending":true}]' --field-order "Project,Status,Area"`],
-          ["Active", `collections views-create --collection ${projects.value} --name "Active" --type table --filters '[{"property":"Status","filterType":"equals","filterValue":"active"}]' --field-order "Project,Area,Status"`],
+          [viewNames.board, `collections views-create --collection ${projects.value} --name ${JSON.stringify(viewNames.board)} --type kanban --group-by Status --column-order "${PROJECT_STATES.join(",")}" --visible-fields "Area" --show-column-colors true`],
+          [viewNames.byArea, `collections views-create --collection ${projects.value} --name ${JSON.stringify(viewNames.byArea)} --type table --group '[{"property":"Area","ascending":true}]' --field-order "Project,Status,Area"`],
+          [viewNames.active, `collections views-create --collection ${projects.value} --name ${JSON.stringify(viewNames.active)} --type table --filters '[{"property":"Status","filterType":"equals","filterValue":"active"}]' --field-order "Project,Area,Status"`],
         ]);
         await ensure(areas.value, "Areas", [
-          ["Board", `collections views-create --collection ${areas.value} --name "Board" --type kanban --group-by Status --column-order "${AREA_STATES.join(",")}" --show-column-colors true`],
+          [viewNames.board, `collections views-create --collection ${areas.value} --name ${JSON.stringify(viewNames.board)} --type kanban --group-by Status --column-order "${AREA_STATES.join(",")}" --show-column-colors true`],
         ]);
       }
 
       // Templates for people: installed once by title into Craft's Templates area.
       const templates: Ref[] = [];
       if (plan.templates !== false) {
-        const language = plan.templates?.language ?? "en";
         const listing = await connection.read("documents list --location templates");
         const existingTitles = new Set<string>();
         if (listing.ok) for (const line of listing.value.split("\n")) { const m = line.match(/^\s+<[^>]+>\s+(.*?)\s*$/); if (m) existingTitles.add(m[1]!); }
@@ -1087,7 +1098,7 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
           const createdDoc = await connection.write(`documents create --title ${JSON.stringify(title)} --destination templates`);
           const id = createdDoc.ok ? createdDoc.value.match(/rootBlockId: ([0-9a-fA-F-]+)/)?.[1] : undefined;
           if (!createdDoc.ok || !id) { limits.push(`Template "${title}" was not installed${createdDoc.ok ? "" : `: ${createdDoc.error.message}`}`); continue; }
-          const body = await connection.write(`blocks add --id ${id} --markdown ${JSON.stringify(craftTemplateBody(role, language))}`);
+          const body = await connection.write(`blocks add --id ${id} --markdown ${JSON.stringify(craftTemplateBody(role, metadataLanguage))}`);
           if (!body.ok) limits.push(`Template "${title}" was created without its body: ${body.error.message}`);
           templates.push({ scope: scopeId, id });
           created.push({ scope: scopeId, id });

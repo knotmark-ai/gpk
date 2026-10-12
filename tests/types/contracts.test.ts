@@ -105,7 +105,7 @@ async function useControl() {
     backend => backend.id === current.knowledgeBackend.activeId,
   );
   const templateRef = current.templates.project;
-  if (!templateRef) return { active, bundledLanguage: current.preferences.language };
+  if (!templateRef) return { active, bundledLanguage: current.preferences.metadataLanguage };
   const template = await control.templates.read(templateRef);
   if (template.ok && template.value.coverage === "complete" && template.value.value.role === "project") {
     return template.value.value.content;
@@ -119,7 +119,7 @@ async function adoptTemplate() {
   return control.settings.update({ templates: { project: created.value.created } }, guard);
 }
 
-control.settings.update({ preferences: { language: "zh-CN", timezone: null, profileWiki, instructions: "Prefer concise explanations." } }, guard);
+control.settings.update({ preferences: { workingLanguage: "zh-CN", metadataLanguage: "en", timezone: null, profileWiki, instructions: "Prefer concise explanations." } }, guard);
 control.settings.update({ preferences: { profileWiki: null }, ingestion: { automatic: { enabled: false } } }, guard);
 control.settings.read({ cursor: "settings-page", limit: 100 });
 control.templates.read(controlRoot, { cursor: "template-page", limit: 100 });
@@ -140,7 +140,7 @@ const settingsRead: Snapshot<UserSettings> = {
   value: {
     schemaVersion: 1,
     knowledgeBackend: selectedBackend,
-    preferences: { language: "en", timezone: null, profileWiki: null, instructions: "" },
+    preferences: { workingLanguage: "en", metadataLanguage: "en", timezone: null, profileWiki: null, instructions: "" },
     templates: { area: null, project: null, task: null, source: null, wiki: null, output: null },
     ingestion: { automatic: { enabled: false, origins: [], dailyNotes: false } },
   },
@@ -236,13 +236,13 @@ knowledge.tasks.schedule(project, "2026-09-30", granted);
 // @ts-expect-error daily-note resolution requires the intended date
 knowledge.captures.resolve({ name: "daily-notes" });
 // @ts-expect-error control mutations also require explicit guard context
-control.settings.update({ preferences: { language: "en" } });
+control.settings.update({ preferences: { workingLanguage: "en" } });
 // @ts-expect-error no arbitrary key/value control surface remains
 control.write("settings", { content: "test", mediaType: "text/plain" }, guard);
 // @ts-expect-error resources are named operations, not arbitrary string keys
 control.read("templates/project");
 // @ts-expect-error onboarding requires a selected backend and explicit layout
-control.settings.initialize({ preferences: { language: "en" } }, createGuard);
+control.settings.initialize({ preferences: { workingLanguage: "en" } }, createGuard);
 // @ts-expect-error template creation requires explicit approval
 control.templates.create({ role: "area", content: "Template" });
 // @ts-expect-error all templates use the unified operation group
@@ -264,9 +264,11 @@ control.settings.update({ grants: [] }, guard);
 // @ts-expect-error configuration has no independently mutable completed flag
 control.settings.update({ onboardingCompleted: true }, guard);
 // @ts-expect-error Settings has named nested preferences, not flattened arbitrary options
-control.settings.update({ language: "en" }, guard);
+control.settings.update({ workingLanguage: "en" }, guard);
 // @ts-expect-error language is a textual preference, not a boolean switch
-control.settings.update({ preferences: { language: true } }, guard);
+control.settings.update({ preferences: { workingLanguage: true } }, guard);
+// @ts-expect-error one language no longer covers both conversation and structural names
+control.settings.update({ preferences: { language: "en" } }, guard);
 // @ts-expect-error personal background references a Wiki, not a Project
 control.settings.update({ preferences: { profileWiki: project } }, guard);
 // @ts-expect-error personal facts stay in Knowledge Backend, not an embedded Profile

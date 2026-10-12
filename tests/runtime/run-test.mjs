@@ -23,7 +23,7 @@ const probe = buildSync({
     'export { createOperations } from "./src/runtime/operations.ts";',
     'export { bootstrap } from "./src/runtime/bootstrap.ts";',
   ].join("\n"), resolveDir: repo, loader: "ts" },
-  bundle: true, platform: "node", format: "esm", write: false, loader: { ".md": "text" },
+  bundle: true, platform: "node", format: "esm", write: false, loader: { ".md": "text", ".html": "text" },
 });
 const { createCraftAdapter, parseTaskListing, parseActionLine, createLocalControlAdapter, resolveControlRoot, memorySecretStore, fileSecretStore, createCraftConnection, createOperations, bootstrap } =
   await import(`data:text/javascript;base64,${Buffer.from(probe.outputFiles[0].contents).toString("base64")}`);
@@ -31,7 +31,7 @@ const { createCraftAdapter, parseTaskListing, parseActionLine, createLocalContro
 const SPACE = { id: "space-1", name: "Test Space", timezone: "Asia/Shanghai" };
 const settings = {
   schemaVersion: 1,
-  preferences: { language: "en", timezone: null, profileWiki: null, instructions: "" },
+  preferences: { workingLanguage: "en", metadataLanguage: "en", timezone: null, profileWiki: null, instructions: "" },
   knowledgeBackend: { activeId: "primary", configurations: [{
     id: "primary", adapter: "craft", instance: SPACE.id,
     connection: { kind: "mcp", transport: "http", endpoint: { kind: "public-url", url: "https://mcp.craft.do/my/mcp" } },
@@ -87,22 +87,23 @@ const grants = { schemaVersion: 1, grants: [
   const freshControl = createLocalControlAdapter({ root: fresh, knownOperations: async () => ["tasks.create", "tasks.update"] });
   assert.equal((await freshControl.settings.initialize({ knowledgeBackend: settings.knowledgeBackend }, { expected: "x" })).error.code, "invalid");
   assert.equal((await freshControl.settings.initialize({ knowledgeBackend: { activeId: "nope", configurations: [] } }, {})).error.code, "invalid");
-  const initialized = await freshControl.settings.initialize({ knowledgeBackend: settings.knowledgeBackend, preferences: { language: "zh-CN" } }, {});
+  const initialized = await freshControl.settings.initialize({ knowledgeBackend: settings.knowledgeBackend, preferences: { workingLanguage: "zh-CN" } }, {});
   assert.equal(initialized.ok, true, JSON.stringify(initialized));
   assert.equal(initialized.value.verified, true);
   let current = await freshControl.settings.read();
-  assert.equal(current.value.value.preferences.language, "zh-CN");
+  assert.equal(current.value.value.preferences.workingLanguage, "zh-CN");
+  assert.equal(current.value.value.preferences.metadataLanguage, "en", "metadata language defaults independently");
   assert.equal(current.value.value.preferences.timezone, null, "declared defaults are materialized");
   assert.deepEqual(current.value.value.templates, { area: null, project: null, task: null, source: null, wiki: null, output: null });
   assert.equal(fs.readdirSync(fresh).filter(f => f.endsWith(".tmp")).length, 0, "temporary files are renamed away");
-  assert.equal((await freshControl.settings.update({ preferences: { language: "zh-CN" } }, {})).error.code, "invalid", "no-op updates are rejected");
+  assert.equal((await freshControl.settings.update({ preferences: { workingLanguage: "zh-CN" } }, {})).error.code, "invalid", "no-op updates are rejected");
   assert.equal((await freshControl.settings.update({ preferences: { instructions: "x" } }, { expected: "sha256:stale" })).error.code, "conflict");
   const updated = await freshControl.settings.update({ preferences: { instructions: "Prefer concise answers." }, ingestion: { automatic: { dailyNotes: true } } }, { expected: current.value.version });
   assert.equal(updated.value.verified, true);
   current = await freshControl.settings.read();
   assert.equal(current.value.value.preferences.instructions, "Prefer concise answers.");
   assert.equal(current.value.value.ingestion.automatic.dailyNotes, true);
-  assert.equal(current.value.value.preferences.language, "zh-CN", "omitted fields are preserved");
+  assert.equal(current.value.value.preferences.workingLanguage, "zh-CN", "omitted fields are preserved");
   assert.equal((await freshControl.grants.grant({ backendId: "primary", root: { scope: SPACE.id, id: "daily-notes" }, operations: ["tasks.remove"], unattended: false }, {})).error.code, "invalid", "unknown operations are rejected");
   const granted = await freshControl.grants.grant({ backendId: "primary", root: { scope: SPACE.id, id: "daily-notes" }, operations: ["tasks.create"], unattended: false }, {});
   assert.equal(granted.value.verified, true);
@@ -513,7 +514,7 @@ function fakeCraft() {
   const clash = await knowledge.layout.establish({ namespace: "root", hostDocument: { title: "GPK" }, areas: { name: "Areas" }, projects: { name: "Projects" }, sources: { name: "Sources" }, wikis: { name: "Wikis" }, outputs: { name: "Outputs" }, views: false, templates: false });
   assert.ok(["partial", "ambiguous"].includes(clash.error.code), "a root-level name clash is refused: " + JSON.stringify(clash));
   // A shared workspace: a namespace folder keeps GPK's structures apart from the user's own.
-  const established = await knowledge.layout.establish({ namespace: { folder: "GPK" }, hostDocument: { title: "GPK" }, areas: { name: "Areas" }, projects: { name: "Projects" }, sources: { id: existingSources.id }, wikis: { name: "Wikis" }, outputs: { name: "Outputs" }, templates: { language: "zh-CN" } });
+  const established = await knowledge.layout.establish({ namespace: { folder: "GPK" }, hostDocument: { title: "GPK" }, areas: { name: "Areas" }, projects: { name: "Projects" }, sources: { id: existingSources.id }, wikis: { name: "Wikis" }, outputs: { name: "Outputs" }, metadataLanguage: "zh-CN" });
   assert.equal(established.ok, true, JSON.stringify(established));
   assert.equal(established.value.locations.source.id, existingSources.id);
   assert.equal(established.value.adopted.length, 1);
@@ -527,7 +528,7 @@ function fakeCraft() {
   const hostDoc = fake.documents.get(established.value.created.map(r => r.id).find(id => fake.documents.get(id)?.title === "GPK"));
   assert.equal(hostDoc.folderId, namespace.id, "the host document is created inside the namespace folder");
   // Views and templates for people.
-  assert.deepEqual(established.value.views, ["Projects: Board", "Projects: By Area", "Projects: Active", "Areas: Board"]);
+  assert.deepEqual(established.value.views, ["Projects: 看板", "Projects: 按领域", "Projects: 进行中", "Areas: 看板"], "view names follow the metadata language");
   assert.deepEqual(fake.collections.get(established.value.locations.project.id).views.map(v => v.type), ["kanban", "table", "table"]);
   assert.equal(established.value.templates.length, 5);
   const installed = [...fake.documents.values()].filter(d => d.location === "templates");
@@ -537,7 +538,7 @@ function fakeCraft() {
   assert.ok(!/^- (状态|主 Area)/m.test(projectTemplate), "Collection-column lines are stripped from the Project template");
   assert.ok(!projectTemplate.includes("<!--"), "authoring comments are stripped");
   // Rerunning with the same names reuses the namespace folder and does not reinstall templates.
-  const again = await knowledge.layout.establish({ namespace: { folder: "GPK" }, hostDocument: { rootId: established.value.created.find(r => fake.documents.get(r.id)?.title === "GPK").id }, areas: { id: established.value.locations.area.id }, projects: { id: established.value.locations.project.id }, sources: { id: existingSources.id }, wikis: { id: established.value.locations.wiki.id }, outputs: { id: established.value.locations.output.id }, templates: { language: "zh-CN" } });
+  const again = await knowledge.layout.establish({ namespace: { folder: "GPK" }, hostDocument: { rootId: established.value.created.find(r => fake.documents.get(r.id)?.title === "GPK").id }, areas: { id: established.value.locations.area.id }, projects: { id: established.value.locations.project.id }, sources: { id: existingSources.id }, wikis: { id: established.value.locations.wiki.id }, outputs: { id: established.value.locations.output.id }, metadataLanguage: "zh-CN" });
   assert.equal(again.ok, true, JSON.stringify(again));
   assert.equal(again.value.namespace.id, namespace.id, "an existing root-level GPK folder is adopted");
   assert.equal(again.value.templates.length, 0, "templates already present by title are not duplicated");
@@ -824,7 +825,7 @@ function fakeCraft() {
   assert.equal(inspected.value.connection.tokens, "verified");
   assert.ok(inspected.value.layout, "layout candidates are inspected once Craft is authorized");
   assert.equal((await setupOps.setupProposeGrants()).error.code, "unavailable", "proposals need initialized Settings");
-  const setup = await setupOps.setupEstablish({ hostDocument: { title: "GPK" }, areas: { name: "Areas" }, projects: { name: "Projects" }, sources: { name: "Sources" }, wikis: { name: "Wikis" }, outputs: { name: "Outputs" }, preferences: { language: "zh-CN" } });
+  const setup = await setupOps.setupEstablish({ hostDocument: { title: "GPK" }, areas: { name: "Areas" }, projects: { name: "Projects" }, sources: { name: "Sources" }, wikis: { name: "Wikis" }, outputs: { name: "Outputs" }, preferences: { workingLanguage: "zh-CN", metadataLanguage: "zh-CN" } });
   assert.equal(setup.ok, true, JSON.stringify(setup));
   assert.equal(setup.value.settings.verified, true);
   const written = JSON.parse(fs.readFileSync(path.join(setupRoot, "settings.json"), "utf8"));
@@ -832,7 +833,8 @@ function fakeCraft() {
   assert.equal(written.knowledgeBackend.configurations[0].instance, SPACE.id);
   assert.equal(written.knowledgeBackend.configurations[0].connection.credentialsRef, "gpk:craft:craft");
   assert.equal(written.knowledgeBackend.configurations[0].layout.locations.project.id, setup.value.locations.project.id);
-  assert.equal(written.preferences.language, "zh-CN");
+  assert.equal(written.preferences.workingLanguage, "zh-CN");
+  assert.equal(written.preferences.metadataLanguage, "zh-CN");
   const setupOps2 = createOperations({ controlRoot: setupRoot, control: setupControl, binding: async () => ({ ok: true, value: setupBinding, limits: [] }), setupBinding: async () => ({ ok: true, value: setupBinding, limits: [] }) });
   const proposal = await setupOps2.setupProposeGrants();
   assert.equal(proposal.ok, true, JSON.stringify(proposal));
@@ -872,6 +874,89 @@ function fakeCraft() {
   assert.equal(fs.statSync(path.join(temporary, "secrets", "secrets.json")).mode & 0o777, 0o600);
   console.log("PASS: bootstrap binds Craft from Settings and keeps secrets out of the control files");
 }
+
+// ---------- Onboarding page: the only Setup surface ----------
+{
+  const http = await import("node:http");
+  const onboardingFake = fakeCraft();
+  const root = path.join(temporary, "onboarding-control");
+  const opened = [];
+  const booted = bootstrap({ env: { GPK_CONTROL_ROOT: root, HOME: temporary }, secrets: memorySecretStore(), createConnection: () => onboardingFake.connection, openBrowser: async url => { opened.push(url); return true; } });
+  const status0 = await booted.operations.runtimeStatus();
+  assert.equal(status0.value.onboarding, "required");
+  const blocked = await booted.operations.tasksQuery({});
+  assert.equal(blocked.error.code, "unavailable");
+  assert.match(blocked.error.next, /gpk_setup_open/, "knowledge work points at the onboarding page");
+  const open = await booted.onboarding.open();
+  assert.equal(open.ok, true, JSON.stringify(open));
+  assert.deepEqual(opened, [open.value.url], "the page is opened in the browser");
+  const page = new URL(open.value.url);
+  assert.equal(page.hostname, "127.0.0.1");
+  const token = page.searchParams.get("t");
+  assert.ok(token && token.length >= 32, "the page carries a long random token");
+  const request = (pathname, { method = "GET", headers = {}, body } = {}) => new Promise((resolve, reject) => {
+    const req = http.request({ host: "127.0.0.1", port: page.port, path: pathname, method, headers: { host: `127.0.0.1:${page.port}`, ...headers } }, res => {
+      let text = ""; res.on("data", chunk => { text += chunk; }); res.on("end", () => resolve({ status: res.statusCode, text, json: () => JSON.parse(text) }));
+    });
+    req.on("error", reject);
+    if (body !== undefined) req.write(typeof body === "string" ? body : JSON.stringify(body));
+    req.end();
+  });
+  const api = (pathname, body) => request(pathname, body === undefined
+    ? { headers: { "x-gpk-token": token } }
+    : { method: "POST", headers: { "x-gpk-token": token, "content-type": "application/json", origin: page.origin }, body });
+
+  // Requests from anywhere but this page are refused.
+  assert.equal((await request("/")).status, 403, "the page needs its token");
+  assert.equal((await request(`/?t=${"x".repeat(token.length)}`)).status, 403);
+  const html = await request(`/?t=${token}`);
+  assert.equal(html.status, 200);
+  assert.ok(html.text.includes("GPK Setup"));
+  assert.equal((await request("/api/state")).status, 403, "the API needs the token header");
+  assert.equal((await request(`/?t=${token}`, { headers: { host: "evil.example:80" } })).status, 403, "a rebound Host is refused");
+  assert.equal((await request("/api/grants", { method: "POST", headers: { "x-gpk-token": token, "content-type": "text/plain" }, body: "{}" })).status, 415, "writes need a JSON body");
+  assert.equal((await request("/api/grants", { method: "POST", headers: { "x-gpk-token": token, "content-type": "application/json", origin: "https://evil.example" }, body: {} })).status, 403, "a foreign Origin is refused");
+
+  let state = (await api("/api/state")).json();
+  assert.equal(state.ok, true, JSON.stringify(state));
+  assert.equal(state.value.onboarding, "required");
+  assert.equal(state.value.connection.tokens, "verified");
+  assert.equal((await api("/api/authorize", {})).json().value.state, "authorized");
+
+  const form = { workspace: "dedicated", workingLanguage: "zh-CN", metadataLanguage: "zh-CN", timezone: null, names: { host: "GPK", areas: "领域", projects: "项目", sources: "来源", wikis: "知识", outputs: "产出" } };
+  assert.equal((await api("/api/establish", { ...form, names: { ...form.names, areas: " " } })).json().error.code, "invalid", "blank names are refused");
+  assert.equal((await api("/api/establish", { ...form, metadataLanguage: "fr" })).json().error.code, "invalid");
+  const established = (await api("/api/establish", form)).json();
+  assert.equal(established.ok, true, JSON.stringify(established));
+  const written = JSON.parse(fs.readFileSync(path.join(root, "settings.json"), "utf8"));
+  assert.deepEqual([written.preferences.workingLanguage, written.preferences.metadataLanguage], ["zh-CN", "zh-CN"]);
+  assert.deepEqual([...onboardingFake.folders.values()].map(f => [f.name, f.parentId]).sort(), [["产出", null], ["来源", null], ["知识", null]], "a dedicated workspace is built at the top level");
+  assert.deepEqual(onboardingFake.collections.get(written.knowledgeBackend.configurations[0].layout.locations.project.id).views.map(v => v.name), ["看板", "按领域", "进行中"], "view names follow the metadata language");
+  assert.ok([...onboardingFake.documents.values()].find(d => d.title === "GPK Project").body.map(b => b.markdown).join("\n").includes("计划与行动"), "template headings follow the metadata language");
+  assert.equal((await api("/api/establish", form)).json().error.code, "invalid", "a set-up workspace is not established twice");
+
+  state = (await api("/api/state")).json().value;
+  assert.equal(state.settings, "ready");
+  assert.equal(state.onboarding, "required", "Settings alone do not complete onboarding");
+  assert.equal(state.proposal.length, 8);
+  const projectRoot = written.knowledgeBackend.configurations[0].layout.locations.project.id;
+  assert.equal((await api("/api/grants", { grants: [{ root: projectRoot, operations: ["projects.remove"] }] })).json().error.code, "invalid", "the page cannot widen a proposed grant");
+  assert.equal((await api("/api/grants", { grants: [{ root: "some-other-root", operations: ["tasks.create"] }] })).json().error.code, "invalid", "the page cannot add a root");
+  const selection = state.proposal.map(grant => ({ root: grant.root.id, operations: grant.root.id === projectRoot ? grant.operations.filter(op => op !== "links.add") : grant.operations }));
+  const granted = (await api("/api/grants", { grants: selection })).json();
+  assert.deepEqual(granted.value, { written: 8, skipped: 0 }, JSON.stringify(granted));
+  const grantsFile = JSON.parse(fs.readFileSync(path.join(root, "grants.json"), "utf8"));
+  assert.ok(!grantsFile.grants.find(g => g.root.id === projectRoot).operations.includes("links.add"), "unticked operations are not granted");
+  assert.deepEqual((await api("/api/grants", { grants: selection })).json().value, { written: 0, skipped: 8 }, "granting again writes nothing");
+  assert.equal((await api("/api/state")).json().value.onboarding, "complete");
+  assert.equal((await booted.operations.runtimeStatus()).value.onboarding, "complete");
+  assert.equal((await api("/api/preferences", { workingLanguage: "en" })).json().ok, true);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(root, "settings.json"), "utf8")).preferences.workingLanguage, "en");
+
+  await booted.close();
+  await assert.rejects(request("/api/state"), "the server stops with the runtime");
+}
+console.log("PASS: the onboarding page is the only Setup surface, guarded by token, Host, Origin and JSON checks, and writes only settings.json and grants.json");
 
 // ---------- Craft connection retry policy against a local MCP-over-HTTP endpoint ----------
 {
@@ -918,9 +1003,9 @@ function domainResult(result) {
 }
 
 const EXPECTED_TOOLS = [
-  "gpk_runtime_status", "gpk_connection_status", "gpk_connection_authorize", "gpk_knowledge_capabilities", "gpk_control_capabilities",
-  "gpk_settings_read", "gpk_grants_list", "gpk_setup_inspect", "gpk_setup_establish", "gpk_setup_propose_grants",
-  "gpk_grants_grant", "gpk_grants_revoke", "gpk_settings_update", "gpk_captures_resolve", "gpk_captures_list", "gpk_captures_read",
+  "gpk_runtime_status", "gpk_connection_status", "gpk_knowledge_capabilities", "gpk_control_capabilities",
+  "gpk_settings_read", "gpk_grants_list", "gpk_setup_inspect", "gpk_setup_open", 
+  "gpk_grants_revoke", "gpk_settings_update", "gpk_captures_resolve", "gpk_captures_list", "gpk_captures_read",
   "gpk_tasks_resolve", "gpk_tasks_read", "gpk_tasks_query", "gpk_tasks_create", "gpk_tasks_update", "gpk_tasks_transition", "gpk_tasks_schedule",
   "gpk_tasks_assign_project", "gpk_areas_resolve", "gpk_areas_read", "gpk_areas_create", "gpk_areas_update", "gpk_areas_transition",
   "gpk_projects_resolve", "gpk_projects_read", "gpk_projects_create", "gpk_projects_update", "gpk_projects_transition", "gpk_projects_assign_area", "gpk_projects_order_tasks",
@@ -953,7 +1038,7 @@ async function checkStdio(root, config, negotiation, controlRoot) {
     const { tools } = await client.listTools();
     assert.deepEqual(tools.map(tool => tool.name).sort(), EXPECTED_TOOLS);
     for (const tool of tools) {
-      const writes = /_(create|update|transition|schedule|authorize|establish|grant|revoke|assign_project|assign_area|order_tasks|append|add|remove|save)$/.test(tool.name);
+      const writes = /_(create|update|transition|schedule|open|revoke|assign_project|assign_area|order_tasks|append|add|remove|save)$/.test(tool.name);
       assert.equal(tool.annotations.readOnlyHint, !writes, tool.name);
     }
     const call = (name, input = {}) => client.callTool({ name, arguments: input }, { timeout: 10000 });
@@ -965,7 +1050,8 @@ async function checkStdio(root, config, negotiation, controlRoot) {
     const settings = domainResult(await call("gpk_settings_read"));
     assert.deepEqual([settings.ok, settings.value], [true, null]);
     assert.equal(domainResult(await call("gpk_grants_list")).value.items.length, 0);
-    for (const name of ["gpk_tasks_query", "gpk_knowledge_capabilities", "gpk_projects_query", "gpk_setup_propose_grants"]) {
+    assert.equal(status.value.onboarding, "required", "a fresh root must be onboarded first");
+    for (const name of ["gpk_tasks_query", "gpk_knowledge_capabilities", "gpk_projects_query"]) {
       assert.equal(domainResult(await call(name)).error.code, "unavailable", `${name} needs initialized Settings`);
     }
     const connection = domainResult(await call("gpk_connection_status"));

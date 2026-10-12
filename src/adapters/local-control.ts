@@ -88,10 +88,11 @@ function validateSettings(value: unknown): string | null {
   }
   if (!ids.has(kb.activeId)) return `settings.json activeId ${kb.activeId} is not a configured backend`;
   const preferences = value.preferences;
-  if (!isRecord(preferences) || typeof preferences.language !== "string" || !preferences.language ||
+  if (!isRecord(preferences) || typeof preferences.workingLanguage !== "string" || !preferences.workingLanguage ||
+      typeof preferences.metadataLanguage !== "string" || !preferences.metadataLanguage ||
       !(preferences.timezone === null || typeof preferences.timezone === "string") ||
       !(preferences.profileWiki === null || isRef(preferences.profileWiki)) || typeof preferences.instructions !== "string") {
-    return "settings.json preferences need language, timezone, profileWiki and instructions";
+    return "settings.json preferences need workingLanguage, metadataLanguage, timezone, profileWiki and instructions";
   }
   const templates = value.templates;
   if (!isRecord(templates)) return "settings.json templates must hold the six role bindings";
@@ -132,7 +133,8 @@ function materializeSettings(input: SettingsInitialization): UserSettings {
   return {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
     preferences: {
-      language: preferences.language ?? "en",
+      workingLanguage: preferences.workingLanguage ?? "en",
+      metadataLanguage: preferences.metadataLanguage ?? "en",
       timezone: preferences.timezone ?? null,
       profileWiki: preferences.profileWiki ?? null,
       instructions: preferences.instructions ?? "",
@@ -159,7 +161,8 @@ function applySettingsChanges(current: UserSettings, changes: SettingsChanges): 
     if (JSON.stringify(target[key]) !== JSON.stringify(value)) { target[key] = value; changed = true; }
   };
   if (changes.preferences) {
-    set(next.preferences, "language", changes.preferences.language);
+    set(next.preferences, "workingLanguage", changes.preferences.workingLanguage);
+    set(next.preferences, "metadataLanguage", changes.preferences.metadataLanguage);
     set(next.preferences, "timezone", changes.preferences.timezone);
     set(next.preferences, "profileWiki", changes.preferences.profileWiki);
     set(next.preferences, "instructions", changes.preferences.instructions);

@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
 import type { Result } from "../domain/operation-types.js";
 import type { Operations } from "../runtime/operations.js";
+import type { OnboardingHandle } from "../onboarding/server.js";
 
 const readOptions = {
   cursor: z.string().optional(),
@@ -30,14 +31,9 @@ const captureSurface = z.discriminatedUnion("name", [
 const captureSurfaceRef = z.strictObject({ scope: z.string().min(1), id: z.string().min(1), role: z.literal("capture-surface") });
 const plainRef = z.strictObject({ scope: z.string().min(1), id: z.string().min(1) });
 const wikiRef = z.strictObject({ scope: z.string().min(1), id: z.string().min(1), kind: z.literal("Wiki") });
-const layoutChoice = (nameOf: string) => z.union([z.strictObject({ name: z.string().min(1) }), z.strictObject({ id: z.string().min(1) })]).describe(nameOf);
-const grantInput = z.strictObject({
-  backendId: z.string().min(1), root: plainRef,
-  operations: z.array(z.string().regex(/^[a-z]+(\.[a-zA-Z]+)+$/)).min(1), unattended: z.boolean(),
-});
 const settingsChanges = z.strictObject({
   preferences: z.strictObject({
-    language: z.string().min(1).optional(), timezone: z.string().min(1).nullable().optional(),
+    workingLanguage: z.string().min(1).optional(), timezone: z.string().min(1).nullable().optional(),
     profileWiki: wikiRef.nullable().optional(), instructions: z.string().optional(),
   }).optional(),
   templates: z.strictObject({
@@ -75,7 +71,7 @@ function response(result: Result<unknown>) {
 }
 
 /** Transport-neutral registration seam; a later HTTP entrypoint can reuse it. */
-export function createGpkServer(operations: Operations, version: string) {
+export function createGpkServer(operations: Operations, version: string, onboarding: OnboardingHandle) {
   const server = new McpServer({ name: "gpk", version });
   const readOnly = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
   const mutating = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
@@ -89,10 +85,6 @@ export function createGpkServer(operations: Operations, version: string) {
     description: "Report GPK's own Craft authorization: registration, stored tokens, pending browser approval and the space once verified.",
     inputSchema: z.strictObject({}), annotations: readOnly,
   }, async () => response(await operations.connectionStatus()));
-  server.registerTool("gpk_connection_authorize", {
-    description: "Start or complete Craft authorization for GPK's own client. A pending result carries the URL the user must open and approve; call gpk_connection_status afterwards.",
-    inputSchema: z.strictObject({}), annotations: { ...mutating, openWorldHint: true },
-  }, async () => response(await operations.connectionAuthorize()));
   server.registerTool("gpk_knowledge_capabilities", {
     description: "Report knowledge adapter capabilities per operation and predicate for the active backend.",
     inputSchema: z.strictObject({}), annotations: readOnly,
@@ -110,36 +102,22 @@ export function createGpkServer(operations: Operations, version: string) {
     inputSchema: z.strictObject({}), annotations: readOnly,
   }, async () => response(await operations.grantsList()));
 
+  // Setup has one entry: the onboarding page. Connecting Craft, creating the layout and
+  // granting permissions happen there by the user's own clicks; no tool writes them.
+  server.registerTool("gpk_setup_open", {
+    description: "Open GPK's onboarding page in the user's browser (connect Craft, create the workspace structure, choose permissions, set languages). Required before any other GPK work when runtime status reports onboarding: required, and to reconnect Craft. Returns the page URL; show it if the browser did not open, then wait for the user and check gpk_setup_inspect.",
+    inputSchema: z.strictObject({}), annotations: { ...mutating, openWorldHint: true },
+  }, async () => response(await onboarding.open()));
   server.registerTool("gpk_setup_inspect", {
     description: "Setup diagnostics: control root, Settings state, Craft authorization, the configured layout's validity and adoptable Collections/folders. Works before Settings exist.",
     inputSchema: z.strictObject({}), annotations: readOnly,
   }, async () => response(await operations.setupInspect()));
-  server.registerTool("gpk_setup_establish", {
-    description: "Establish the Craft layout (host document, Areas and Projects Collections, Sources/Wikis/Outputs folders), adopting by id or creating by name, then initialize or update Settings. Requires prior Craft authorization and the user's confirmation of the plan.",
-    inputSchema: z.strictObject({
-      namespace: z.union([z.strictObject({ folder: z.string().min(1) }), z.strictObject({ folderId: z.string().min(1) }), z.literal("root")]).optional()
-        .describe("Folder that holds everything GPK creates; default a root folder named GPK"),
-      views: z.boolean().optional(), templates: z.union([z.strictObject({ language: z.enum(["en", "zh-CN"]) }), z.literal(false)]).optional(),
-      hostDocument: z.union([z.strictObject({ title: z.string().min(1) }), z.strictObject({ rootId: z.string().min(1) })]),
-      areas: layoutChoice("Areas Collection"), projects: layoutChoice("Projects Collection"),
-      sources: layoutChoice("Sources folder"), wikis: layoutChoice("Wikis folder"), outputs: layoutChoice("Outputs folder"),
-      preferences: z.strictObject({ language: z.string().min(1).optional(), timezone: z.string().min(1).nullable().optional() }).optional(),
-    }), annotations: mutating,
-  }, async args => response(await operations.setupEstablish(withoutUndefined({ ...args, preferences: args.preferences && withoutUndefined(args.preferences) }))));
-  server.registerTool("gpk_setup_propose_grants", {
-    description: "Propose the default non-destructive grant set for the configured layout. Writes nothing; pass the confirmed list to gpk_grants_grant.",
-    inputSchema: z.strictObject({}), annotations: readOnly,
-  }, async () => response(await operations.setupProposeGrants()));
-  server.registerTool("gpk_grants_grant", {
-    description: "Persist grants the user explicitly confirmed in this conversation. Operation IDs must be port operations; wildcards are rejected.",
-    inputSchema: z.strictObject({ grants: z.array(grantInput).min(1) }), annotations: mutating,
-  }, async args => response(await operations.grantsGrant(args.grants)));
   server.registerTool("gpk_grants_revoke", {
     description: "Revoke one grant by its reference from gpk_grants_list.",
     inputSchema: z.strictObject({ ref: plainRef, expected }), annotations: destructive,
   }, async args => response(await operations.grantsRevoke(args.ref, args.expected)));
   server.registerTool("gpk_settings_update", {
-    description: "Apply named Settings changes (preferences, template bindings, automatic ingestion). Layout changes go through gpk_setup_establish.",
+    description: "Apply named Settings changes (working language, timezone, instructions, template bindings, automatic ingestion). Layout, metadata language and grants change only on the onboarding page (gpk_setup_open).",
     inputSchema: z.strictObject({ changes: settingsChanges, expected }), annotations: mutating,
   }, async args => response(await operations.settingsUpdate(args.changes as Parameters<typeof operations.settingsUpdate>[0], args.expected)));
 

@@ -68,7 +68,7 @@ async function source() {
       'export { defaultSecretStore } from "./src/adapters/secret-store.ts";',
       'export { defaultCredentialsRef } from "./src/runtime/bootstrap.ts";',
     ].join("\n"), resolveDir: repo, loader: "ts" },
-    bundle: true, platform: "node", format: "esm", write: false, loader: { ".md": "text" },
+    bundle: true, platform: "node", format: "esm", write: false, loader: { ".md": "text", ".html": "text" },
     banner: { js: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);' },
   });
   const file = path.join(os.tmpdir(), `gpk-dev-${process.pid}.mjs`);

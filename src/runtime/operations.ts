@@ -29,20 +29,32 @@ export type OperationsOptions = {
 export type SetupInspection = {
   controlRoot: string;
   settings: RuntimeStatus["settings"];
+  onboarding: OnboardingState;
+  preferences?: { workingLanguage: string; metadataLanguage: string; timezone: string | null };
   backend?: { id: string; endpoint: string };
   connection: ConnectionStatus;
   layout?: LayoutInspection;
   grants: number;
 };
 
-export type SetupPlan = LayoutPlan & {
-  preferences?: { language?: string; timezone?: string | null };
+export type SetupPlan = Omit<LayoutPlan, "metadataLanguage"> & {
+  preferences?: { workingLanguage?: string; metadataLanguage?: "en" | "zh-CN"; timezone?: string | null };
 };
+
+/** One grant the user ticked on the onboarding page: a root from the proposal and a subset of its operations. */
+export type GrantSelection = { root: string; operations: string[] };
+
+/**
+ * Onboarding is complete once Settings exist and at least one grant is persisted.
+ * Until then knowledge work is refused and the Agent is sent to `gpk_setup_open`.
+ */
+export type OnboardingState = "required" | "complete";
 
 export type RuntimeStatus = {
   stage: "review-slice";
   controlRoot: string;
   settings: "uninitialized" | "ready" | "invalid" | "unavailable";
+  onboarding: OnboardingState;
   backend?: { id: string; endpoint: string };
   connection?: ConnectionStatus;
   implemented: string[];
@@ -82,7 +94,7 @@ export function createOperations(options: OperationsOptions) {
     const match = grants.value.items.map(item => item.value).find(grant =>
       grant.backendId === backendId && grant.operations.includes(operation) &&
       grant.root.scope === scope && rootKeys.includes(grant.root.id));
-    if (!match) return failure("unauthorized", `No grant in ${controlRoot} covers ${operation} on ${rootKeys.join(" or ")}.`, "Add a grant for this backend, root and operation (Setup), then retry.");
+    if (!match) return failure("unauthorized", `No grant in ${controlRoot} covers ${operation} on ${rootKeys.join(" or ")}.`, "Call gpk_setup_open; the user grants operations on the onboarding page, then retry.");
     return { ok: true, value: match, limits: [] };
   }
 
@@ -101,6 +113,13 @@ export function createOperations(options: OperationsOptions) {
     return guardForLocation(bound, roleOf[from.kind], operation, from.scope, expected);
   }
 
+  async function onboardingState(): Promise<OnboardingState> {
+    const settings = await control.settings.read();
+    if (!settings.ok || settings.value === null) return "required";
+    const grants = await control.grants.list();
+    return grants.ok && grants.value.items.length > 0 ? "complete" : "required";
+  }
+
   async function withBinding<T>(run: (bound: KnowledgeBinding) => Promise<Result<T>>): Promise<Result<T>> {
     const bound = await binding();
     return bound.ok ? run(bound.value) : bound;
@@ -111,7 +130,7 @@ export function createOperations(options: OperationsOptions) {
   async function guardForLocation(bound: KnowledgeBinding, role: LocationRole, operation: string, scope: string, expected?: Version): Promise<Result<GrantedWriteGuard>> {
     const layout = await bound.layout();
     if (!layout.ok) return layout;
-    if (!layout.value || layout.value[role].id === "unset") return failure("unavailable", `The ${role} location is not configured.`, "Run Setup (gpk_setup_establish) first.");
+    if (!layout.value || layout.value[role].id === "unset") return failure("unavailable", `The ${role} location is not configured.`, "Call gpk_setup_open and let the user finish onboarding in the browser.");
     const grant = await grantFor(bound.backendId, operation, [layout.value[role].id], scope);
     if (!grant.ok) return grant;
     return { ok: true, value: expected === undefined ? { grant: grant.value } : { grant: grant.value, expected }, limits: [] };
@@ -142,6 +161,7 @@ export function createOperations(options: OperationsOptions) {
       const status: RuntimeStatus = {
         stage: "review-slice", controlRoot,
         settings: !settings.ok ? (settings.error.code === "invalid" ? "invalid" : "unavailable") : settings.value === null ? "uninitialized" : "ready",
+        onboarding: await onboardingState(),
         implemented,
       };
       const bound = await setupBinding();
@@ -149,15 +169,17 @@ export function createOperations(options: OperationsOptions) {
         if (status.settings === "ready") status.backend = { id: bound.value.backendId, endpoint: bound.value.endpoint };
         status.connection = await bound.value.connection.status();
       }
-      return { ok: true, value: status, limits: ["Settings and secret presence only; no Craft request is made by this diagnostic."] };
+      const limits = ["Settings and secret presence only; no Craft request is made by this diagnostic."];
+      if (status.onboarding === "required") limits.unshift("Onboarding is not complete: call gpk_setup_open and let the user finish it in the browser before any other GPK work.");
+      return { ok: true, value: status, limits };
     },
     connectionStatus: async (): Promise<Result<ConnectionStatus>> => {
       const bound = await setupBinding();
       return bound.ok ? { ok: true, value: await bound.value.connection.status(), limits: bound.limits } : bound;
     },
-    connectionAuthorize: async () => {
+    connectionAuthorize: async (returnTo?: string) => {
       const bound = await setupBinding();
-      return bound.ok ? bound.value.connection.authorize() : bound;
+      return bound.ok ? bound.value.connection.authorize(returnTo) : bound;
     },
     async setupInspect(): Promise<Result<SetupInspection>> {
       const settings = await control.settings.read();
@@ -168,9 +190,14 @@ export function createOperations(options: OperationsOptions) {
       const inspection: SetupInspection = {
         controlRoot,
         settings: !settings.ok ? (settings.error.code === "invalid" ? "invalid" : "unavailable") : settings.value === null ? "uninitialized" : "ready",
+        onboarding: await onboardingState(),
         connection,
         grants: grants.ok ? grants.value.items.length : 0,
       };
+      if (settings.ok && settings.value) {
+        const { workingLanguage, metadataLanguage, timezone } = settings.value.value.preferences;
+        inspection.preferences = { workingLanguage, metadataLanguage, timezone };
+      }
       if (settings.ok && settings.value) inspection.backend = { id: bound.value.backendId, endpoint: bound.value.endpoint };
       const limits = [...bound.limits];
       if (connection.tokens === "verified") {
@@ -190,9 +217,9 @@ export function createOperations(options: OperationsOptions) {
       if (!scoped.ok) return scoped;
       const { preferences, ...layoutPlan } = plan;
       const settingsForDefaults = await control.settings.read();
-      const language = preferences?.language ?? (settingsForDefaults.ok && settingsForDefaults.value ? settingsForDefaults.value.value.preferences.language : "en");
-      const templates = layoutPlan.templates ?? { language: language === "zh-CN" ? "zh-CN" as const : "en" as const };
-      const established = await bound.value.knowledge.layout.establish({ ...layoutPlan, templates });
+      const configured = settingsForDefaults.ok && settingsForDefaults.value ? settingsForDefaults.value.value.preferences.metadataLanguage : "en";
+      const metadataLanguage = preferences?.metadataLanguage ?? (configured === "zh-CN" ? "zh-CN" : "en");
+      const established = await bound.value.knowledge.layout.establish({ ...layoutPlan, metadataLanguage });
       if (!established.ok) return established;
       const current = await control.settings.read();
       if (!current.ok) return current;
@@ -225,7 +252,7 @@ export function createOperations(options: OperationsOptions) {
       const bound = await binding();
       if (!bound.ok) return bound;
       const settings = await control.settings.read();
-      if (!settings.ok || settings.value === null) return failure("unavailable", "Settings are not initialized.", "Run gpk_setup_establish first.");
+      if (!settings.ok || settings.value === null) return failure("unavailable", "Settings are not initialized.", "Call gpk_setup_open and let the user finish onboarding in the browser.");
       const active = settings.value.value.knowledgeBackend.configurations.find(c => c.id === settings.value!.value.knowledgeBackend.activeId)!;
       return { ok: true, value: defaultGrants(active.id, active.instance, active.layout.locations), limits: ["Default set: non-destructive operations only; remove, archive and restore are never proposed."] };
     },
@@ -245,6 +272,33 @@ export function createOperations(options: OperationsOptions) {
         receipts.push(receipt.value);
       }
       return { ok: true, value: receipts, limits: [] };
+    },
+    /**
+     * Persist grants the user ticked on the onboarding page. Each selection must name a
+     * root of the current proposal and a subset of its operations, so the page cannot
+     * widen authority; grants already present with the same operations are skipped.
+     */
+    async setupGrant(selection: GrantSelection[]): Promise<Result<{ written: number; skipped: number }>> {
+      const proposal = await this.setupProposeGrants();
+      if (!proposal.ok) return proposal;
+      const chosen: ControlGrant[] = [];
+      for (const item of selection) {
+        const proposed = proposal.value.find(grant => grant.root.id === item.root);
+        if (!proposed) return failure("invalid", `Root ${item.root} is not in the proposal.`, "Reload the onboarding page and choose from the proposed grants.");
+        const extra = item.operations.filter(op => !proposed.operations.includes(op));
+        if (extra.length) return failure("invalid", `Operations outside the proposal for ${item.root}: ${extra.join(", ")}.`, "Choose only proposed operations.");
+        if (item.operations.length) chosen.push({ ...proposed, operations: proposed.operations.filter(op => item.operations.includes(op)) });
+      }
+      const existing = await control.grants.list();
+      if (!existing.ok) return existing;
+      const key = (grant: ControlGrant) => JSON.stringify([grant.backendId, grant.root.scope, grant.root.id, [...grant.operations].sort()]);
+      const present = new Set(existing.value.items.map(item => key(item.value)));
+      const missing = chosen.filter(grant => !present.has(key(grant)));
+      if (missing.length) {
+        const written = await this.grantsGrant(missing);
+        if (!written.ok) return written;
+      }
+      return { ok: true, value: { written: missing.length, skipped: chosen.length - missing.length }, limits: [] };
     },
     grantsRevoke: (ref: Ref, expected?: Version) => control.grants.revoke(ref, expected === undefined ? {} : { expected }),
     settingsUpdate: (changes: SettingsChanges, expected?: Version) => control.settings.update(changes, expected === undefined ? {} : { expected }),

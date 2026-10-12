@@ -93,13 +93,13 @@ Inbox 和 Daily Notes 是捕获与工作入口。准确的关系、状态和操�
 
 | 组件 | 当前可用能力 |
 |---|---|
-| `gpk-setup` Skill | 检查就绪状态、在浏览器中授权一次 Craft、建立布局（命名空间文件夹、宿主文档、Areas / Projects Collections、Sources / Wikis / Outputs 文件夹、视图与模板）、写入 Settings，并在用户确认后持久化默认授权 |
+| `gpk-setup` Skill | 打开 GPK 的本地 onboarding 页面，完成之前不能做任何其他工作：连接 Craft，选择专用或共用工作区、工作语言与元数据语言和名称，创建结构（宿主文档、带视图的 Areas / Projects Collections、Sources / Wikis / Outputs 文件夹、模板），勾选权限。只写 `settings.json` 和 `grants.json`，授权只能在这个页面上创建 |
 | `gpk-plan` Skill | 以 Collection 行创建 Area 和 Project（Objective、KR、范围、主 Area），在 Project 内按计划顺序添加和排序 Task，附加过程材料，更改主 Area，在 Project 与独立之间移动 Task |
 | `gpk-work` Skill | 把 Inbox / Daily Note 捕获澄清为 Task（独立或归属 Project）、推进或改期、记录结果、在独立与 Project Task 之间给出下一步选择，并在 Task 处置完毕后关闭 Project |
 | `gpk-ingest` Skill | 登记带来源与访问证据的 Source，修订或创建受影响的 Wiki 并以链接作引用，留存 Output，为记录之间添加带说明的链接，用检查点保存可续处理进度 |
 | `gpk-review` Skill | 日 / 周 / 月及临时回顾：一次读取回顾全量（捕获、逾期／今日／即将／进行中／等待的 Task、各状态 Project 及注意信号、Area 下的 Project 数、遍历范围与缺口），结论通过实体工具写回原记录 |
 | `gpk` Skill | 解释方法并路由到五个工作流 |
-| stdio MCP 运行时 | 63 个工具：运行、连接与 Setup 诊断，Craft 授权，布局建立，授权提议，Settings 读写，授权列表／授予／撤销，能力报告，Inbox / Daily Note 捕获，Task 的解析／读取／查询／创建／更新／流转／排期／归属，Area 与 Project 的解析／读取／查询／创建／更新／流转，Project 的主 Area 指派与 Task 排序，Project 材料的列表／读取／追加／更新，Source / Wiki / Output 的解析／读取／查询／创建／更新，链接的查询／添加／移除，检查点的读取／保存，回顾全量读取 |
+| stdio MCP 运行时 | 60 个工具：运行、连接与 Setup 诊断，onboarding 页面，Settings 读写，授权列表／撤销，能力报告，Inbox / Daily Note 捕获，Task 的解析／读取／查询／创建／更新／流转／排期／归属，Area 与 Project 的解析／读取／查询／创建／更新／流转，Project 的主 Area 指派与 Task 排序，Project 材料的列表／读取／追加／更新，Source / Wiki / Output 的解析／读取／查询／创建／更新，链接的查询／添加／移除，检查点的读取／保存，回顾全量读取 |
 | Craft Adapter | GPK 自己的 OAuth 客户端连接 Craft MCP 端点（动态注册、PKCE、回环回调、令牌刷新存于宿主无关的密钥库，每个控制根一套令牌）；全部实体的读写操作、链接与检查点已在两个真实空间验证；归档、恢复与删除未实现 |
 | 本地控制 Adapter | 通过原子文件替换和摘要冲突检测读写所选 `.gpk` 根下的 `settings.json` 与 `grants.json`；个人模板未实现 |
 | 授权 | 每次写入都从 `grants.json` 解析后端、根与操作对应的授权（布局中的 Collection 或文件夹、`daily-notes`、`inbox` 或 `system`）；Adapter 复核记录所在容器；归属移动按目标根授权，链接按发起记录授权；工具参数不携带任何权限 |

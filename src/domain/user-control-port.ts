@@ -75,8 +75,15 @@ export type KnowledgeBackendSelection = {
 
 /** Current operating preferences, not another personal facts or Project database. */
 export type UserPreferences = {
-  /** Nonempty language code; default en. An explicit current request can override it. */
-  language: string;
+  /** Language of the conversation and of the content the Agent writes into records
+   * (bodies, results, reasons); default en. An explicit current request can override it.
+   */
+  workingLanguage: string;
+  /** Language of structural names: folders, Collections, views and template headings;
+   * default en. Schema keys, state values and GPK tags stay English regardless, so
+   * records stay machine-readable whatever this is.
+   */
+  metadataLanguage: string;
   /** IANA timezone override, or null to use a verified backend timezone. Never
    * silently use the executing machine's zone; unavailable timezone stops dated work.
    */
@@ -162,7 +169,8 @@ export type UserSettings = {
  * and preserves during update. Empty instructions deliberately removes extra preferences.
  */
 export type PreferenceChanges = {
-  language?: string;
+  workingLanguage?: string;
+  metadataLanguage?: string;
   timezone?: string | null;
   profileWiki?: WikiRef | null;
   instructions?: string;
@@ -174,7 +182,7 @@ export type AutomaticIngestChanges = {
 };
 
 /** Setup/onboarding supplies actual backend selection and locations; those have
- * no fabricated defaults. Materialize defaults: schemaVersion 1, language en,
+ * no fabricated defaults. Materialize defaults: schemaVersion 1, both languages en,
  * null timezone/profile and all template bindings, empty instructions/origins,
  * automatic/daily false.
  * Defaults never create records, grants, connections or scheduler registrations.

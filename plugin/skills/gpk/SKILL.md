@@ -1,6 +1,6 @@
 ---
 name: gpk
-description: Use for GPK method questions, record lookup or a general GPK request. Explains the method and routes requests. Setup, Task and capture operations are implemented; other entities report unsupported.
+description: Use for GPK method questions, record lookup or a general GPK request. Explains the method and routes requests. Routes to the five workflows; until onboarding is complete every request goes to gpk-setup first.
 ---
 
 # GPK

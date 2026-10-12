@@ -9,15 +9,14 @@ invoke a CLI, configure credentials or open a second connection itself.
 2. Call `gpk_runtime_status` with `{}`. It reports the control root, whether
    Settings are initialized, the active backend and whether credentials are
    stored. It makes no Craft request.
-3. If Settings are `uninitialized`, knowledge operations are unavailable:
-   hand over to `gpk-setup`, which authorizes Craft, establishes the layout and
-   writes Settings and grants after the user confirms each step.
-4. Call `gpk_connection_status`. If tokens are `none`, call
-   `gpk_connection_authorize`; a `pending` result carries an authorization URL.
-   Show it to the user, ask them to approve GPK in the browser, then poll
-   `gpk_connection_status` until the space appears. GPK is authorized as its own
-   client; the host's Craft connector is unrelated. Both calls work before
-   Settings exist.
+3. If `onboarding` is `required`, stop the request and hand over to
+   `gpk-setup`: it calls `gpk_setup_open`, and the user connects Craft, creates
+   the workspace structure and grants permissions on GPK's local onboarding
+   page. No tool writes Settings or grants for the user. Every knowledge
+   operation fails with a `next` step naming `gpk_setup_open` until then.
+4. Call `gpk_connection_status` when a call fails `unauthorized` at the Craft
+   level; reconnecting also happens on the onboarding page. GPK is authorized
+   as its own client; the host's Craft connector is unrelated.
 5. Call `gpk_knowledge_capabilities` for the operations this request needs.
    Missing or `unsupported` entries never imply support.
 6. For a supported operation, use its discovered input schema. Read before
@@ -28,8 +27,8 @@ invoke a CLI, configure credentials or open a second connection itself.
    `conflict` means the record changed since it was read; `partial` means some
    effects happened and the rest must be inspected before retrying.
 
-Implemented now: connection status/authorize, Setup (inspect, establish the
-Craft layout, propose grants), Settings read/update, grants list/grant/revoke,
+Implemented now: connection status, Setup (the onboarding page and inspection),
+Settings read/update, grants list/revoke,
 Inbox and Daily Note captures, Tasks (read, query, create standalone or under a
 Project, update, transition, schedule, assign to a Project), Areas and Projects
 (resolve, read, query, create, update, transition; Project assign-area and

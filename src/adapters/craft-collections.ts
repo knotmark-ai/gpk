@@ -93,7 +93,7 @@ export function createCollectionOperations(ctx: CraftContext) {
     const layout = await ctx.layout();
     if (!layout.ok) return layout;
     if (!layout.value || layout.value.project.id === "unset" || layout.value.area.id === "unset") {
-      return failure("unavailable", "The Projects and Areas Collections are not configured.", "Run Setup (gpk_setup_establish) first.");
+      return failure("unavailable", "The Projects and Areas Collections are not configured.", "Call gpk_setup_open and let the user finish onboarding in the browser.");
     }
     return { ok: true, value: { project: layout.value.project.id, area: layout.value.area.id }, limits: [] };
   }

@@ -91,28 +91,31 @@ context-output test does not establish these Agent decisions.
 ## 4. Run Setup
 
 GPK reads `GPK_CONTROL_ROOT` from the launch environment and otherwise uses
-`~/.gpk`; the directory is created on the first write. In the loaded host, ask
-the Setup Skill to onboard GPK, or drive the tools yourself:
+`~/.gpk`; the directory is created on the first write. Until Setup is done,
+`gpk_runtime_status` reports `onboarding: "required"` and every knowledge
+operation fails with a `next` step that names `gpk_setup_open`.
 
-1. `gpk_setup_inspect({})`: control root, Settings state (`uninitialized` on a
-   fresh root), Craft authorization and, once authorized, existing Collections
-   and folders.
-2. `gpk_connection_authorize({})`: the first run returns `pending` with a URL.
-   Open it, choose the space and approve "GPK". Craft lists GPK as its own
-   connection, separate from the host's Craft connector. Poll
-   `gpk_connection_status({})` until `tokens` is `verified`.
-3. `gpk_setup_establish({...})` with the plan the user confirmed. The default
-   assumes a workspace dedicated to GPK and creates everything at the top
-   level: the host document (Areas and Projects
-   Collections with Board/By Area/Active views) and the Sources/Wikis/Outputs
-   folders, and installs the `GPK …` templates into Craft's Templates area.
-   Existing folders or Collections are adopted only by ID when the user names
-   them. It verifies everything and writes `settings.json`; rerunning with the
-   same IDs is a no-op.
-4. `gpk_setup_propose_grants({})`, then `gpk_grants_grant` with the confirmed
-   list. Nothing is written until the user confirms.
-5. `gpk_setup_inspect({})` again: Settings `ready`, every layout location `ok`,
-   grants counted.
+Ask the Agent to set up GPK. It calls `gpk_setup_open`, which starts a page on
+`127.0.0.1` inside the runtime process and opens it in your browser:
+
+1. **Connect Craft.** Craft asks you to choose a workspace and approve "GPK",
+   then sends the browser back to the page. Craft lists GPK as its own
+   connection, separate from the host's Craft connector.
+2. **Workspace and languages.** Choose a dedicated workspace (everything at the
+   top level, recommended) or a shared one (everything in one folder), the
+   working language (conversation and record content), the metadata language
+   (folder, Collection and view names, template headings) and the names. GPK
+   creates the host document with the Areas and Projects Collections and their
+   views, the Sources, Wikis and Outputs folders and the `GPK …` templates, and
+   writes `settings.json`.
+3. **Permissions.** Untick anything GPK should not do; the rest is written to
+   `grants.json`. Deleting, archiving and restoring are never offered.
+
+The page is the only way grants are created: no MCP tool writes them, so the
+Agent can open the page but cannot consent for you. Each page session has a
+random token, and the server accepts requests only for its own Host and
+Origin with JSON bodies; it stops after 30 minutes without activity or with the
+runtime.
 
 Tokens are never stored in the control root: on macOS they go to the login
 keychain under the `gpk` service, elsewhere to `secrets.json` in the root with
