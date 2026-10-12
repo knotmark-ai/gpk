@@ -97,7 +97,9 @@ representation choice and is independent of the transport that carries it.
   configured locations is read-only for GPK.
 - **Entity kind** is Collection membership for Projects and Areas. Sources, Wikis
   and Outputs are ordinary documents whose kind is the Settings layout location
-  that contains them (`documents list --folder` lists it recursively); a document
+  that contains them (`documents list --folder`, which despite its documentation
+  does not include subfolders, so a document in a subfolder is not yet recognized;
+  see the 2026-10-12 command surface table); a document
   moved out of its location is unrecognized, not reclassified. The root block ID
   is the entity ID, its markdown is the title (renamed with `blocks update` on
   the root), and `documents create --title --folder` plus a body `blocks add`
@@ -107,10 +109,11 @@ representation choice and is independent of the transport that carries it.
   `- [title](block://<id>) — context` under a `## Links` heading (appended once;
   later links follow the last bullet), or a child block of a Task. The block
   link round-trips through markdown unchanged. Outgoing links are read from that
-  body; incoming links are found by scanning every GPK record body (rows at
-  depth 2 so their Tasks count, documents at depth 1) in batched reads, because
-  `search` indexes with a delay and does not match link targets. `relatedTo`
-  predicates reuse that discovery. Link targets must be GPK records; a target
+  body. Incoming links are found by searching the target's title (search does
+  not index link targets, and new content is indexed with a delay of up to a few
+  minutes), then reading the matching documents plus the Area and Project rows at
+  depth 2 so their Tasks count; without a title or search, every GPK record body
+  is scanned in batched reads. `relatedTo` predicates reuse that discovery. Link targets must be GPK records; a target
   that is none of them but is a task block is a Task.
 - **Checkpoints** are nested pages of a `GPK System` page nested in the host
   document, titled by key; the page's blocks are the content. The system page
