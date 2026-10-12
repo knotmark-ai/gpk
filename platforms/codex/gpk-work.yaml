@@ -1,6 +1,6 @@
 interface:
   display_name: "GPK Work"
-  short_description: "GPK Work MCP entrypoint and capability checks"
-  default_prompt: "Use $gpk-work to check the GPK MCP runtime and relevant adapter capabilities."
+  short_description: "Choose the next action and record Task progress"
+  default_prompt: "Use $gpk-work to pick the next action for today."
 policy:
   allow_implicit_invocation: true

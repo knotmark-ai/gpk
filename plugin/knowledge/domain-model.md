@@ -14,8 +14,9 @@ GPK requires no editor, harness, scheduler or synchronization service of its own
 The shared references define the v0.4 methodology, including
 [six entity templates](../guides/templates.md) for in-conversation drafts;
 the Task template is an inline fragment, not a required document.
-The current Skill entrypoints are engineering-skeleton MCP call instructions,
-not implemented business workflows; see [MCP invocation](../guides/mcp.md).
+The Skill entrypoints drive the implemented MCP operations; see
+[MCP invocation](../guides/mcp.md) for what is implemented and what still
+returns `unsupported`.
 
 ## Representation and relationships
 

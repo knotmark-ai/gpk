@@ -107,11 +107,17 @@ export function bootstrap(options: BootstrapOptions = {}) {
     const settings = await control.settings.read();
     if (!settings.ok) return settings;
     if (settings.value === null) return failure("unavailable", `GPK is not set up in ${controlRoot}.`, "Call gpk_setup_open and let the user finish onboarding in the browser.");
-    const configuration = activeConfiguration(settings.value.value);
-    if (!configuration.ok) return configuration;
-    const config = configuration.value;
-    const connectionConfig = config.connection as { endpoint: { url: string }; credentialsRef?: string };
-    return { ok: true, value: bind(config.id, connectionConfig.endpoint.url, connectionConfig.credentialsRef), limits: [] };
+    // Settings are validated at the storage boundary; this guard keeps any shape it
+    // missed a normalized failure instead of an exception escaping to the tool call.
+    try {
+      const configuration = activeConfiguration(settings.value.value);
+      if (!configuration.ok) return configuration;
+      const config = configuration.value;
+      const connectionConfig = config.connection as { endpoint: { url: string }; credentialsRef?: string };
+      return { ok: true, value: bind(config.id, connectionConfig.endpoint.url, connectionConfig.credentialsRef), limits: [] };
+    } catch {
+      return failure("invalid", "The active backend configuration in settings.json cannot be used.", "Repair settings.json by hand or reopen GPK setup.");
+    }
   }
 
   /** Setup and diagnostics work before Settings exist, on the default Craft endpoint. */

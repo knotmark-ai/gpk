@@ -28,6 +28,9 @@ export type CraftBlock = {
   nextCursor?: string;
 };
 
+/** Where a Task lives: its grant root key and kind (inbox, daily-note, project or document). */
+export type TaskContainer = { key: string; kind: "inbox" | "daily-note" | "document" | "project"; date?: string; rootId?: string; projectId?: string };
+
 /** Shared helpers the Task slice already provides; the Collections slice reuses them. */
 export type CraftContext = {
   connection: CraftConnection;
@@ -44,11 +47,15 @@ export type CraftContext = {
   /** Plan literal edits against a block's children; conflict on ambiguity. */
   planEdits(block: CraftBlock, edits: TextEdit[], target: Ref): Result<Map<string, string>>;
   writeEdits(plans: Map<string, string>): Promise<Result<void>>;
+  /** Whether a read-back shows every planned edit, including paragraphs split into following siblings. */
+  editsApplied(after: CraftBlock, plans: Map<string, string>): boolean;
   today(): string;
   /** The document hosting the Collections; null before Setup. */
   hostRoot(): Promise<Result<string | null>>;
   /** A Task's grant container (inbox, Daily Note, Project row or document). */
-  taskContainer(ref: TaskRef): Promise<Result<{ key: string; kind: string; projectId?: string }>>;
+  taskContainer(ref: TaskRef): Promise<Result<TaskContainer>>;
+  /** Enforce a grant against a Task's real container, so the `daily-notes` wildcard applies to Daily Note Tasks. */
+  authorizeContainer(guard: GrantedWriteGuard, operation: string, container: TaskContainer, target?: Ref): Promise<Result<ControlGrant>>;
   /** A folder and all its descendants (Craft's folder listing is not recursive). */
   folderWithDescendants(folderId: string, refresh?: boolean): Promise<Result<string[]>>;
   /** IDs linked to or from an endpoint, for relatedTo predicates; set once the link module exists. */
@@ -142,7 +149,19 @@ export function createCollectionOperations(ctx: CraftContext) {
     return { ok: true, value: items, limits: [] };
   }
 
-  async function readItem<R extends Ref>(ref: R, collectionId: string, kind: string): Promise<Result<CraftBlock>> {
+  /**
+   * Whether a row is in a Collection. Writes ask with `fresh` (the default) so
+   * authorization never rests on a cached fact; reads may use the cached listing.
+   */
+  async function isRow(collectionId: string, rowId: string, mode: "fresh" | "cached" = "fresh"): Promise<Result<boolean>> {
+    const known = members.get(collectionId.toLowerCase())?.has(rowId.toLowerCase());
+    if (mode === "cached" && known) return { ok: true, value: true, limits: [] };
+    const rows = await listItems(collectionId);
+    if (!rows.ok) return rows;
+    return { ok: true, value: Boolean(members.get(collectionId.toLowerCase())?.has(rowId.toLowerCase())), limits: [] };
+  }
+
+  async function readItem<R extends Ref>(ref: R, collectionId: string, kind: string, mode: "fresh" | "cached" = "fresh"): Promise<Result<CraftBlock>> {
     const scoped = await ctx.space();
     if (!scoped.ok) return scoped;
     if (ref.scope !== scoped.value.id || !UUID.test(ref.id)) return failure("invalid", `The reference is not a ${kind} in the bound Craft space.`, `Resolve the ${kind} in this space first.`, [ref]);
@@ -151,11 +170,9 @@ export function createCollectionOperations(ctx: CraftContext) {
     if (block.value.type !== "collectionItem") return failure("invalid", `The block is not a Collection row.`, `Use the operations of the entity this block belongs to.`, [ref]);
     // A row block does not name its Collection, so membership is checked against the
     // configured Collection's items; a row of any other Collection is not this entity.
-    if (!members.get(collectionId.toLowerCase())?.has(ref.id.toLowerCase())) {
-      const rows = await listItems(collectionId);
-      if (!rows.ok) return rows;
-      if (!members.get(collectionId.toLowerCase())?.has(ref.id.toLowerCase())) return failure("not-found", `The row is not in the ${kind}s Collection.`, `Resolve the ${kind} again; rows of other Collections are not GPK ${kind}s.`, [ref]);
-    }
+    const member = await isRow(collectionId, ref.id, mode);
+    if (!member.ok) return member;
+    if (!member.value) return failure("not-found", `The row is not in the ${kind}s Collection.`, `Resolve the ${kind} again; rows of other Collections are not GPK ${kind}s.`, [ref]);
     return { ok: true, value: block.value, limits: [] };
   }
 
@@ -194,10 +211,10 @@ export function createCollectionOperations(ctx: CraftContext) {
     return { ok: true, value: offset, limits: [] };
   }
 
-  async function verifyItem<R extends Ref, T>(ref: R, collectionId: string, kind: string, project: (block: CraftBlock) => T, predicate: (value: T) => boolean, recovery: string): Promise<Result<WriteReceipt>> {
-    const after = await readItem(ref, collectionId, kind);
+  async function verifyItem<R extends Ref, T>(ref: R, collectionId: string, kind: string, project: (block: CraftBlock) => T, predicate: (value: T, block: CraftBlock) => boolean, recovery: string): Promise<Result<WriteReceipt>> {
+    const after = await readItem(ref, collectionId, kind, "cached");
     if (!after.ok) return { ok: false, error: { ...after.error, code: "uncertain", next: recovery } };
-    const verified = predicate(project(after.value));
+    const verified = predicate(project(after.value), after.value);
     return { ok: true, value: { affected: [ref], verified, version: ctx.digestOf(after.value), ...(verified ? {} : { recovery }) }, limits: verified ? [] : ["Read-back did not show the requested effect."] };
   }
 
@@ -214,7 +231,7 @@ export function createCollectionOperations(ctx: CraftContext) {
     },
     async read(ref) {
       const loc = await locations(); if (!loc.ok) return loc;
-      const block = await readItem(ref, loc.value.area, "Area"); if (!block.ok) return block;
+      const block = await readItem(ref, loc.value.area, "Area", "cached"); if (!block.ok) return block;
       return { ok: true, value: { ref, value: toArea(block.value), version: ctx.digestOf(block.value), coverage: "complete" }, limits: [] };
     },
     async query(query: AreaQuery) {
@@ -237,12 +254,15 @@ export function createCollectionOperations(ctx: CraftContext) {
       const page = candidates.slice(offset.value, offset.value + limit);
       const blocks = await ctx.readBlocks(page.map(item => item.id), 1); if (!blocks.ok) return blocks;
       const snapshots: Snapshot<Area, AreaRef>[] = [];
+      const unreadable: string[] = [];
       for (const item of page) {
-        const block = blocks.value.get(item.id.toLowerCase()); if (!block) continue;
+        const block = blocks.value.get(item.id.toLowerCase()); if (!block) { unreadable.push(item.id); continue; }
         snapshots.push({ ref: { kind: "Area", scope: scoped.value.id, id: item.id }, value: toArea(block), version: ctx.digestOf(block), coverage: "complete" });
       }
       const next = offset.value + limit;
-      const result: Page<Snapshot<Area, AreaRef>> = next < candidates.length ? { items: snapshots, coverage: "partial", next: Buffer.from(`areas:${next}`).toString("base64url") } : { items: snapshots, coverage: "complete" };
+      // A listed row that could not be read leaves the page incomplete even when it is the last one.
+      const result: Page<Snapshot<Area, AreaRef>> = next < candidates.length ? { items: snapshots, coverage: "partial", next: Buffer.from(`areas:${next}`).toString("base64url") } : { items: snapshots, coverage: unreadable.length ? "partial" : "complete" };
+      if (unreadable.length) limits.push(`Listed but unreadable during the query and omitted: ${unreadable.join(", ")}.`);
       if (query.text) limits.push("text matched Area titles only.");
       return { ok: true, value: result, limits };
     },
@@ -282,7 +302,7 @@ export function createCollectionOperations(ctx: CraftContext) {
       }
       const written = await ctx.writeEdits(plans.value);
       if (!written.ok) return { ok: false, error: { ...written.error, code: "partial", affected: [ref], next: "Some edits were applied; read the Area back before retrying the rest." } };
-      return verifyItem(ref, loc.value.area, "Area", toArea, area => update.title === undefined || area.title === update.title.trim(), "Read the Area back and compare.");
+      return verifyItem(ref, loc.value.area, "Area", toArea, (area, block) => (update.title === undefined || area.title === update.title.trim()) && ctx.editsApplied(block, plans.value), "Read the Area back and compare.");
     },
     archive: async () => failure("unsupported", "areas.archive is not implemented.", "Not implemented in this slice."),
     restore: async () => failure("unsupported", "areas.restore is not implemented.", "Not implemented in this slice."),
@@ -307,11 +327,11 @@ export function createCollectionOperations(ctx: CraftContext) {
   async function projectOf(block: CraftBlock, scope: string): Promise<Project> { return toProject(block, scope); }
 
   /** A material is a nested non-task page of its Project's row; anything else is out of scope. */
-  async function readMaterial(ref: ProjectMaterialRef): Promise<Result<CraftBlock>> {
+  async function readMaterial(ref: ProjectMaterialRef, mode: "fresh" | "cached" = "fresh"): Promise<Result<CraftBlock>> {
     const scoped = await ctx.space(); if (!scoped.ok) return scoped;
     if (ref.scope !== scoped.value.id || !UUID.test(ref.id)) return failure("invalid", "The material reference is not a block in this space.", "List the Project's materials again.", [ref]);
     const loc = await locations(); if (!loc.ok) return loc;
-    const owner = await readItem(ref.project, loc.value.project, "Project"); if (!owner.ok) return owner;
+    const owner = await readItem(ref.project, loc.value.project, "Project", mode); if (!owner.ok) return owner;
     const child = (owner.value.content ?? []).find(block => block.id.toLowerCase() === ref.id.toLowerCase());
     if (!child || child.type !== "page" || child.listStyle === "task") return failure("not-found", "The block is not a material page of this Project.", "List the Project's materials again.", [ref]);
     return ctx.readBlock(ref.id, 1);
@@ -322,7 +342,7 @@ export function createCollectionOperations(ctx: CraftContext) {
       const scoped = await ctx.space(); if (!scoped.ok) return scoped;
       const loc = await locations(); if (!loc.ok) return loc;
       if (options?.cursor) return failure("invalid", "Material listings are returned in one page.", "Omit the cursor.");
-      const block = await readItem(project, loc.value.project, "Project"); if (!block.ok) return block;
+      const block = await readItem(project, loc.value.project, "Project", "cached"); if (!block.ok) return block;
       const items: Snapshot<ProjectMaterial, ProjectMaterialRef>[] = [];
       for (const child of block.value.content ?? []) {
         if (child.type !== "page" || child.listStyle === "task") continue;
@@ -331,7 +351,7 @@ export function createCollectionOperations(ctx: CraftContext) {
       return { ok: true, value: { items, coverage: "complete" }, limits: ["Nested pages only; inline sections are part of the Project body. Read each material for its content."] };
     },
     async read(ref) {
-      const block = await readMaterial(ref); if (!block.ok) return block;
+      const block = await readMaterial(ref, "cached"); if (!block.ok) return block;
       return { ok: true, value: { ref, value: { title: block.value.title ?? block.value.markdown ?? "", content: ctx.bodyOf(block.value), presentation: "child-document" }, version: ctx.digestOf(block.value), coverage: "complete" }, limits: [] };
     },
     async append(project, material, guard) {
@@ -367,7 +387,9 @@ export function createCollectionOperations(ctx: CraftContext) {
       const written = await ctx.writeEdits(plans.value);
       if (!written.ok) return { ok: false, error: { ...written.error, code: "partial", affected: [ref], next: "Some edits were applied; read the material back before retrying." } };
       const after = await ctx.readBlock(ref.id, 1);
-      return after.ok ? { ok: true, value: { affected: [ref], verified: true, version: ctx.digestOf(after.value) }, limits: [] } : { ok: false, error: { ...after.error, code: "uncertain" } };
+      if (!after.ok) return { ok: false, error: { ...after.error, code: "uncertain" } };
+      const verified = (update.title === undefined || (after.value.markdown ?? "").trim() === update.title.trim()) && ctx.editsApplied(after.value, plans.value);
+      return { ok: true, value: { affected: [ref], verified, version: ctx.digestOf(after.value), ...(verified ? {} : { recovery: "Read the material back and compare." }) }, limits: verified ? [] : ["Read-back did not show the requested effect."] };
     },
     remove: async () => failure("unsupported", "projects.materials.remove is not implemented.", "Not implemented in this slice."),
   };
@@ -384,7 +406,7 @@ export function createCollectionOperations(ctx: CraftContext) {
     },
     async read(ref) {
       const loc = await locations(); if (!loc.ok) return loc;
-      const block = await readItem(ref, loc.value.project, "Project"); if (!block.ok) return block;
+      const block = await readItem(ref, loc.value.project, "Project", "cached"); if (!block.ok) return block;
       return { ok: true, value: { ref, value: await projectOf(block.value, ref.scope), version: ctx.digestOf(block.value), coverage: "complete" }, limits: [] };
     },
     async query(query: ProjectQuery) {
@@ -408,12 +430,15 @@ export function createCollectionOperations(ctx: CraftContext) {
       const page = candidates.slice(offset.value, offset.value + limit);
       const blocks = await ctx.readBlocks(page.map(item => item.id), 1); if (!blocks.ok) return blocks;
       const snapshots: Snapshot<Project, ProjectRef>[] = [];
+      const unreadable: string[] = [];
       for (const item of page) {
-        const block = blocks.value.get(item.id.toLowerCase()); if (!block) continue;
+        const block = blocks.value.get(item.id.toLowerCase()); if (!block) { unreadable.push(item.id); continue; }
         snapshots.push({ ref: { kind: "Project", scope: scoped.value.id, id: item.id }, value: toProject(block, scoped.value.id), version: ctx.digestOf(block), coverage: "complete" });
       }
       const next = offset.value + limit;
-      const result: Page<Snapshot<Project, ProjectRef>> = next < candidates.length ? { items: snapshots, coverage: "partial", next: Buffer.from(`projects:${next}`).toString("base64url") } : { items: snapshots, coverage: "complete" };
+      // A listed row that could not be read leaves the page incomplete even when it is the last one.
+      const result: Page<Snapshot<Project, ProjectRef>> = next < candidates.length ? { items: snapshots, coverage: "partial", next: Buffer.from(`projects:${next}`).toString("base64url") } : { items: snapshots, coverage: unreadable.length ? "partial" : "complete" };
+      if (unreadable.length) limits.push(`Listed but unreadable during the query and omitted: ${unreadable.join(", ")}.`);
       if (query.text) limits.push("text matched Project titles only.");
       return { ok: true, value: result, limits };
     },
@@ -456,7 +481,7 @@ export function createCollectionOperations(ctx: CraftContext) {
       }
       const written = await ctx.writeEdits(plans.value);
       if (!written.ok) return { ok: false, error: { ...written.error, code: "partial", affected: [ref], next: "Some edits were applied; read the Project back before retrying the rest." } };
-      return verifyItem(ref, loc.value.project, "Project", block => toProject(block, ref.scope), project => update.title === undefined || project.title === update.title.trim(), "Read the Project back and compare.");
+      return verifyItem(ref, loc.value.project, "Project", block => toProject(block, ref.scope), (project, block) => (update.title === undefined || project.title === update.title.trim()) && ctx.editsApplied(block, plans.value), "Read the Project back and compare.");
     },
     archive: async () => failure("unsupported", "projects.archive is not implemented.", "Not implemented in this slice."),
     restore: async () => failure("unsupported", "projects.restore is not implemented.", "Not implemented in this slice."),
@@ -507,7 +532,7 @@ export function createCollectionOperations(ctx: CraftContext) {
         const moved = await ctx.connection.write(`blocks move --id ${tasks[i]!.id} --targetSiblingId ${tasks[i - 1]!.id} --position after`);
         if (!moved.ok) return { ok: false, error: { ...moved.error, code: "partial", affected: [ref], next: "The order was partly applied; read the Project back and retry." } };
       }
-      const after = await readItem(ref, loc.value.project, "Project");
+      const after = await readItem(ref, loc.value.project, "Project", "cached");
       if (!after.ok) return { ok: false, error: { ...after.error, code: "uncertain", next: "Read the Project back to see the resulting order." } };
       const resulting = (after.value.content ?? []).filter(child => child.listStyle === "task").map(child => child.id.toLowerCase());
       const verified = resulting.join(",") === requested.join(",");
@@ -516,5 +541,5 @@ export function createCollectionOperations(ctx: CraftContext) {
     materials,
   };
 
-  return { areas, projects, listItems, locations, readItem, propertiesOf };
+  return { areas, projects, listItems, locations, readItem, isRow, propertiesOf };
 }

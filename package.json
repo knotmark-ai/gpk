@@ -1,7 +1,7 @@
 {
   "name": "gpk",
   "version": "0.1.0",
-  "description": "Portable goal- and project-driven knowledge workflows. Stdio MCP runtime with Craft Task and capture operations; other entities are not implemented.",
+  "description": "Portable goal- and project-driven knowledge workflows: Skills plus a stdio MCP runtime that keeps Areas, Projects, Tasks, Sources, Wikis and Outputs in Craft.",
   "type": "module",
   "private": true,
   "scripts": {

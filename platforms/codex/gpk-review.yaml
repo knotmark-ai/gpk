@@ -1,6 +1,6 @@
 interface:
   display_name: "GPK Review"
-  short_description: "GPK Review MCP entrypoint and capability checks"
-  default_prompt: "Use $gpk-review to check the GPK MCP runtime and relevant adapter capabilities."
+  short_description: "Review Projects, Tasks and Areas against intent"
+  default_prompt: "Use $gpk-review to run a weekly review."
 policy:
   allow_implicit_invocation: true

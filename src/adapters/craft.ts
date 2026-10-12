@@ -101,7 +101,7 @@ export const AREA_STATES = ["active", "inactive"] as const;
 
 export type CraftKnowledgeAdapter = KnowledgeBackendPort & {
   /** Which grant root a Task falls under: `inbox`, `daily-notes/<date>` or a document root ID. */
-  containerOf(ref: TaskRef): Promise<Result<CraftTaskContainer>>;
+  containerOf(ref: TaskRef, mode?: "fresh" | "cached"): Promise<Result<CraftTaskContainer>>;
   /** Provider structures behind the Settings layout; Setup's only Craft-side responsibility. */
   layout: {
     inspect(locations?: KnowledgeLayout["locations"]): Promise<Result<LayoutInspection>>;
@@ -424,9 +424,17 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
     return { ok: true, value: read.value.data?.[0]?.id ?? null, limits: [] };
   }
 
-  /** Confirm a hinted container by listing just that document; cheap and authoritative. */
-  async function verifyHint(ref: TaskRef, hint: CraftTaskContainer): Promise<boolean> {
+  /**
+   * Confirm a hinted container before using it. A Project hint must still name the
+   * currently configured Projects Collection, its row must still be in that Collection
+   * (checked fresh for writes) and the Task must still be a child of the row.
+   */
+  async function verifyHint(ref: TaskRef, hint: CraftTaskContainer, mode: "fresh" | "cached"): Promise<boolean> {
     if (hint.kind === "project" && hint.projectId) {
+      const host = await projectsHost();
+      if (!host.ok || !host.value || host.value.collectionId.toLowerCase() !== hint.key.toLowerCase()) return false;
+      const member = await collectionOps.isRow(host.value.collectionId, hint.projectId, mode);
+      if (!member.ok || !member.value) return false;
       const item = await readBlock(hint.projectId, 1);
       return item.ok && (item.value.content ?? []).some(child => child.id.toLowerCase() === ref.id.toLowerCase());
     }
@@ -444,9 +452,10 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
     return listing.ok && parseTaskListing(listing.value).some(task => task.id.toLowerCase() === ref.id.toLowerCase());
   }
 
-  async function containerOf(ref: TaskRef): Promise<Result<CraftTaskContainer>> {
+  /** The Task's container; `fresh` (the default, used by every write) re-checks Collection membership. */
+  async function containerOf(ref: TaskRef, mode: "fresh" | "cached" = "fresh"): Promise<Result<CraftTaskContainer>> {
     const hint = containerHints.get(ref.id.toLowerCase());
-    if (hint && await verifyHint(ref, hint)) return { ok: true, value: hint, limits: [] };
+    if (hint && await verifyHint(ref, hint, mode)) return { ok: true, value: hint, limits: [] };
     const all = await listAll();
     if (!all.ok) return all;
     const found = all.value.tasks.find(task => task.id.toLowerCase() === ref.id.toLowerCase());
@@ -537,8 +546,29 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
     return { ok: true, value: undefined, limits: [] };
   }
 
+  /**
+   * Whether a read-back shows each planned edit: the target block holds the first
+   * paragraph and, when the edit had paragraph breaks, the following siblings hold
+   * the rest in order. Prefixes are compared without the rendered list marker.
+   */
+  function editsApplied(after: CraftBlock, plans: Map<string, string>): boolean {
+    const children = after.content ?? [];
+    const clean = (text: string) => text.replace(LINE_PREFIX, "").trim();
+    for (const [id, text] of plans) {
+      const paragraphs = text.replace(LINE_PREFIX, "").split(/\n\s*\n/).map(clean).filter(Boolean);
+      const index = children.findIndex(child => child.id.toLowerCase() === id.toLowerCase());
+      if (index < 0) return false;
+      if (!paragraphs.length) { if (clean(children[index]!.markdown ?? "")) return false; continue; }
+      for (let k = 0; k < paragraphs.length; k++) {
+        const child = children[index + k];
+        if (!child || clean(child.markdown ?? "") !== paragraphs[k]) return false;
+      }
+    }
+    return true;
+  }
+
   const ctx: CraftContext = {
-    connection, backendId, space, readJson, readBlock, readBlocks, digestOf, bodyOf, authorizeRoot, planEdits, writeEdits,
+    connection, backendId, space, readJson, readBlock, readBlocks, digestOf, bodyOf, authorizeRoot, planEdits, writeEdits, editsApplied,
     layout: async () => options.layout ? options.layout() : { ok: true, value: null, limits: [] },
     today: () => todayIn(spaceCache?.timezone ?? "UTC"),
     async folderWithDescendants(folderId, refresh) {
@@ -551,6 +581,7 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
     },
     hostRoot: async () => { const host = await projectsHost(); return host.ok ? { ok: true, value: host.value?.rootId ?? null, limits: [] } : host; },
     taskContainer: ref => containerOf(ref),
+    authorizeContainer: (guard, operation, container, target) => authorize(guard, operation, container, target),
   };
   const collectionOps = createCollectionOperations(ctx);
   const documentOps = createDocumentOperations(ctx, collectionOps);
@@ -579,7 +610,7 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
     async read(ref) {
       const block = await readTaskBlock(ref);
       if (!block.ok) return block;
-      const container = await containerOf(ref);
+      const container = await containerOf(ref, "cached");
       if (!container.ok) return container;
       return { ok: true, value: snapshotOf(ref, block.value, container.value), limits: [] };
     },
@@ -607,7 +638,7 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
         // One Project's Tasks come straight from its row; no space-wide listing.
         if (!host.value) return failure("unavailable", "The Projects Collection is not configured.", "Call gpk_setup_open and let the user finish onboarding in the browser.");
         if (query.project.scope !== scoped.value.id) return failure("invalid", "The Project belongs to another space.", "Resolve the Project in this space.");
-        const item = await collectionOps.readItem(query.project, host.value.collectionId, "Project");
+        const item = await collectionOps.readItem(query.project, host.value.collectionId, "Project", "cached");
         if (!item.ok) return item;
         candidates = (item.value.content ?? []).filter(child => child.listStyle === "task").map(child => {
           const parsed = parseActionLine(child.markdown ?? "");
@@ -796,7 +827,7 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
       const before = new Set((block.content ?? []).map(child => child.id));
       for (const child of after.value.content ?? []) if (!before.has(child.id)) affected.push({ scope: ref.scope, id: child.id });
       const titleOk = update.title === undefined || toTask(after.value).title === update.title.trim();
-      const editsOk = [...plans].every(([id, text]) => (after.value.content ?? []).some(child => child.id === id && (child.markdown ?? "").replace(LINE_PREFIX, "") === text.replace(LINE_PREFIX, "").split("\n\n")[0]));
+      const editsOk = editsApplied(after.value, plans);
       return { ok: true, value: { affected, verified: titleOk && editsOk, version: digestOf(after.value), ...(titleOk && editsOk ? {} : { recovery: "Read the Task back and compare." }) }, limits: [] };
     },
     archive: async () => unsupported("craft.tasks.archive"),

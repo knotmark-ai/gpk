@@ -5,7 +5,7 @@ import type {
 } from "../domain/knowledge-backend-port.js";
 import type { CreateReceipt, Failure, GrantedWriteGuard, Page, ReadOptions, Result, Snapshot, WriteReceipt } from "../domain/operation-types.js";
 import type { KnowledgeLayout } from "../domain/user-control-port.js";
-import { jsonArgument, type CraftBlock, type CraftContext, type createCollectionOperations } from "./craft-collections.js";
+import { jsonArgument, type CraftBlock, type CraftContext, type TaskContainer, type createCollectionOperations } from "./craft-collections.js";
 
 /**
  * Sources, Wikis and Outputs as documents in the folders Setup established, plus
@@ -158,10 +158,10 @@ export function createDocumentOperations(ctx: CraftContext, collections: ReturnT
   // ---------- one implementation for the three folder-backed entities ----------
   function documentEntity<K extends DocumentKind, R extends DocumentRef, V extends { title: string; content: string }>(kind: K, role: DocumentRole, operation: (name: string) => string) {
     const project = (block: CraftBlock): V => ({ title: block.markdown ?? "", content: ctx.bodyOf(block) } as V);
-    const verify = async (ref: R, folderId: string, predicate: (value: V) => boolean, recovery: string): Promise<Result<WriteReceipt>> => {
+    const verify = async (ref: R, folderId: string, predicate: (value: V, block: CraftBlock) => boolean, recovery: string): Promise<Result<WriteReceipt>> => {
       const after = await readDocument(ref, kind, folderId);
       if (!after.ok) return { ok: false, error: { ...after.error, code: "uncertain", next: recovery } };
-      const verified = predicate(project(after.value));
+      const verified = predicate(project(after.value), after.value);
       return { ok: true, value: { affected: [ref], verified, version: ctx.digestOf(after.value), ...(verified ? {} : { recovery }) }, limits: verified ? [] : ["Read-back did not show the requested effect."] };
     };
     return {
@@ -206,12 +206,15 @@ export function createDocumentOperations(ctx: CraftContext, collections: ReturnT
         const page = candidates.slice(offset.value, offset.value + limit);
         const blocks = await ctx.readBlocks(page.map(row => row.id), 1); if (!blocks.ok) return blocks;
         const items: Snapshot<V, R>[] = [];
+        const unreadable: string[] = [];
         for (const row of page) {
-          const block = blocks.value.get(row.id.toLowerCase()); if (!block) continue;
+          const block = blocks.value.get(row.id.toLowerCase()); if (!block) { unreadable.push(row.id); continue; }
           items.push({ ref: { kind, scope: scoped.value.id, id: row.id } as R, value: project(block), version: ctx.digestOf(block), coverage: "complete" });
         }
         const next = offset.value + limit;
-        const result: Page<Snapshot<V, R>> = next < candidates.length ? { items, coverage: "partial", next: Buffer.from(`${role}:${next}`).toString("base64url") } : { items, coverage: "complete" };
+        // A listed record that could not be read leaves the page incomplete even when it is the last one.
+        const result: Page<Snapshot<V, R>> = next < candidates.length ? { items, coverage: "partial", next: Buffer.from(`${role}:${next}`).toString("base64url") } : { items, coverage: unreadable.length ? "partial" : "complete" };
+        if (unreadable.length) limits.push(`Listed but unreadable during the query and omitted: ${unreadable.join(", ")}.`);
         return { ok: true, value: result, limits };
       },
       async create(input: { title: string; content: string }, guard: GrantedWriteGuard): Promise<Result<CreateReceipt<R>>> {
@@ -247,7 +250,7 @@ export function createDocumentOperations(ctx: CraftContext, collections: ReturnT
         }
         const written = await ctx.writeEdits(plans.value);
         if (!written.ok) return { ok: false, error: { ...written.error, code: "partial", affected: [ref], next: `Some edits were applied; read the ${kind} back before retrying the rest.` } };
-        return verify(ref, folder.value, value => update.title === undefined || value.title === update.title.trim(), `Read the ${kind} back and compare.`);
+        return verify(ref, folder.value, (value, block) => (update.title === undefined || value.title === update.title.trim()) && ctx.editsApplied(block, plans.value), `Read the ${kind} back and compare.`);
       },
       archive: async () => failure("unsupported", `${operation("archive")} is not implemented; Craft's trash purges after 30 days, which is not archiving.`, "Keep the document; note its status in the body."),
       restore: async () => failure("unsupported", `${operation("restore")} is not implemented.`, "Not implemented in this slice."),
@@ -280,7 +283,7 @@ export function createDocumentOperations(ctx: CraftContext, collections: ReturnT
   }
 
   /** The block that carries an endpoint's links and the root its grant must name. */
-  async function endpoint(ref: LinkEndpoint, records: Map<string, Classified>): Promise<Result<{ block: CraftBlock; rootId: string; title: string }>> {
+  async function endpoint(ref: LinkEndpoint, records: Map<string, Classified>): Promise<Result<{ block: CraftBlock; rootId: string; title: string; container?: TaskContainer }>> {
     const scoped = await ctx.space(); if (!scoped.ok) return scoped;
     if (ref.scope !== scoped.value.id || !UUID.test(ref.id)) return failure("invalid", "The reference is not a record in the bound Craft space.", "Resolve it in this space first.", [ref]);
     if (ref.kind === "Task") {
@@ -288,7 +291,7 @@ export function createDocumentOperations(ctx: CraftContext, collections: ReturnT
       const block = await ctx.readBlock(ref.id, 1); if (!block.ok) return block;
       if (block.value.listStyle !== "task") return failure("invalid", "The block is not a task block.", "Resolve the Task again.", [ref]);
       const parsed = block.value.markdown?.replace(/^\s*(?:[-*]|\d+\.)\s*(?:\[[ xX-]\]\s*)?/, "").replace(/\s*#gpk\/task\/\w+\s*$/, "").trim() ?? "";
-      return { ok: true, value: { block: block.value, rootId: container.value.key, title: parsed }, limits: [] };
+      return { ok: true, value: { block: block.value, rootId: container.value.key, title: parsed, container: container.value }, limits: [] };
     }
     const record = records.get(ref.id.toLowerCase());
     if (!record || record.kind !== ref.kind) return failure("not-found", `No ${ref.kind} with this ID is in its GPK location.`, `Resolve the ${ref.kind} again.`, [ref]);
@@ -386,7 +389,7 @@ export function createDocumentOperations(ctx: CraftContext, collections: ReturnT
       const records = await inventory(); if (!records.ok) return records;
       const from = await endpoint(link.from, records.value); if (!from.ok) return from;
       const to = await endpoint(link.to, records.value); if (!to.ok) return to;
-      const granted = await ctx.authorizeRoot(guard, "links.add", from.value.rootId, link.from); if (!granted.ok) return granted;
+      const granted = from.value.container ? await ctx.authorizeContainer(guard, "links.add", from.value.container, link.from) : await ctx.authorizeRoot(guard, "links.add", from.value.rootId, link.from); if (!granted.ok) return granted;
       if (guard.expected !== undefined && guard.expected !== ctx.digestOf(from.value.block)) return failure("conflict", "The linking record changed since it was read.", "Read it again and retry.", [link.from]);
       const existing = (from.value.block.content ?? []).map(child => parseLinkLine(child.markdown ?? "")).find(parsed => parsed?.id === link.to.id.toLowerCase() && parsed.context === link.context.trim());
       if (existing) return failure("conflict", "This link already exists with the same context.", "Nothing to add.", [link.from]);
@@ -412,7 +415,7 @@ export function createDocumentOperations(ctx: CraftContext, collections: ReturnT
     async remove(link, guard) {
       const records = await inventory(); if (!records.ok) return records;
       const from = await endpoint(link.from, records.value); if (!from.ok) return from;
-      const granted = await ctx.authorizeRoot(guard, "links.remove", from.value.rootId, link.from); if (!granted.ok) return granted;
+      const granted = from.value.container ? await ctx.authorizeContainer(guard, "links.remove", from.value.container, link.from) : await ctx.authorizeRoot(guard, "links.remove", from.value.rootId, link.from); if (!granted.ok) return granted;
       if (guard.expected !== undefined && guard.expected !== ctx.digestOf(from.value.block)) return failure("conflict", "The linking record changed since it was read.", "Read it again and retry.", [link.from]);
       const matches = (from.value.block.content ?? []).filter(child => { const parsed = parseLinkLine(child.markdown ?? ""); return parsed?.id === link.to.id.toLowerCase() && parsed.context === link.context.trim(); });
       if (!matches.length) return failure("not-found", "No such link line exists on the record.", "Query the record's links to see the current ones.", [link.from]);

@@ -1,6 +1,6 @@
 interface:
   display_name: "GPK Setup"
-  short_description: "GPK Setup MCP entrypoint and capability checks"
-  default_prompt: "Use $gpk-setup to check the GPK MCP runtime and relevant adapter capabilities."
+  short_description: "Connect a knowledge base and grant GPK access"
+  default_prompt: "Use $gpk-setup to set up GPK or check its readiness."
 policy:
   allow_implicit_invocation: true

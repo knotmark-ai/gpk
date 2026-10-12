@@ -4,16 +4,16 @@
   "hooks": "./hooks/entry.json",
   "interface": {
     "displayName": "GPK",
-    "shortDescription": "GPK Skills and stdio MCP engineering skeleton",
-    "longDescription": "A portable goal- and project-driven knowledge method. This engineering skeleton exposes runtime diagnostics and unsupported adapter operations; storage and business workflows are not implemented.",
+    "shortDescription": "Goals, Projects, Tasks and knowledge in Craft",
+    "longDescription": "A portable goal- and project-driven knowledge method. Skills for setup, planning, daily work, ingesting material and review, backed by a local MCP runtime that reads and writes Areas, Projects, Tasks, Sources, Wikis and Outputs in Craft under explicit grants.",
     "category": "Productivity",
     "capabilities": [
       "skills"
     ],
     "brandColor": "#4F6F52",
     "defaultPrompt": [
-      "Check the GPK MCP runtime status.",
-      "Show the GPK adapter capabilities without changing anything."
+      "Set up GPK.",
+      "What should I work on next?"
     ]
   }
 }

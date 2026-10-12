@@ -17,8 +17,9 @@ Note, or in a Project's plan with `project`), rename, edit the body, transition
 between todo / doing / waiting / done / canceled, set or clear the planned date,
 and move between a Project and standalone. Inbox and Daily Note captures can be
 listed and read. Projects can be read and closed here once their Tasks are
-resolved; framing or revising a plan belongs to `gpk-plan`. Result routing into
-Wiki or Output returns `unsupported`; keep the result on the Task.
+resolved; framing or revising a plan belongs to `gpk-plan`. Record the result
+on the Task; when it should also become a Wiki or Output, or update a Source,
+hand off to `gpk-ingest`, which creates the record and links it to the Task.
 
 ## Clarify a capture into a Task
 

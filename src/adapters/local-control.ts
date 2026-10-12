@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { Ref } from "../domain/entities.js";
@@ -69,6 +69,26 @@ function isRef(value: unknown): value is Ref {
   return isRecord(value) && typeof value.scope === "string" && typeof value.id === "string";
 }
 
+/**
+ * The connection union of KnowledgeConnection, field by field: hand edits to the
+ * control files are expected, and a missing endpoint must surface as invalid
+ * Settings here rather than as an exception wherever the field is first used.
+ */
+function validateConnection(value: unknown): string | null {
+  if (!isRecord(value)) return "connection must be an object";
+  const endpoint = (candidate: unknown): string | null => {
+    if (!isRecord(candidate)) return "connection.endpoint is required";
+    if (candidate.kind === "public-url") return typeof candidate.url === "string" && /^https?:\/\//.test(candidate.url) ? null : "connection.endpoint.url must be an http(s) URL";
+    if (candidate.kind === "secret-reference") return typeof candidate.ref === "string" && candidate.ref ? null : "connection.endpoint.ref must be a nonempty string";
+    return "connection.endpoint.kind must be public-url or secret-reference";
+  };
+  if (value.credentialsRef !== undefined && (typeof value.credentialsRef !== "string" || !value.credentialsRef)) return "connection.credentialsRef must be a nonempty string when present";
+  if (value.kind === "mcp" && value.transport === "http") return endpoint(value.endpoint);
+  if (value.kind === "mcp" && value.transport === "stdio") return typeof value.profileRef === "string" && value.profileRef ? null : "connection.profileRef is required for stdio";
+  if (value.kind === "api") return endpoint(value.endpoint);
+  return "connection.kind/transport must be mcp+http, mcp+stdio or api";
+}
+
 /** Structural validation of the named Settings fields the runtime depends on. */
 function validateSettings(value: unknown): string | null {
   if (!isRecord(value)) return "settings.json must hold an object";
@@ -82,6 +102,14 @@ function validateSettings(value: unknown): string | null {
     if (!isRecord(configuration) || typeof configuration.id !== "string" || typeof configuration.adapter !== "string" ||
         typeof configuration.instance !== "string" || !isRecord(configuration.connection) || !isRecord(configuration.layout)) {
       return "settings.json knowledgeBackend.configurations entries need id, adapter, instance, connection and layout";
+    }
+    const where = `settings.json knowledgeBackend configuration ${configuration.id}`;
+    const connectionProblem = validateConnection(configuration.connection);
+    if (connectionProblem) return `${where}: ${connectionProblem}`;
+    const locations = (configuration.layout as Record<string, unknown>).locations;
+    if (!isRecord(locations)) return `${where}: layout.locations must hold the five locations`;
+    for (const role of ["area", "project", "source", "wiki", "output"]) {
+      if (!isRef(locations[role])) return `${where}: layout.locations.${role} must be a reference with scope and id`;
     }
     if (ids.has(configuration.id)) return `settings.json duplicate backend configuration id ${configuration.id}`;
     ids.add(configuration.id);
@@ -123,6 +151,43 @@ async function writeJsonAtomic(file: string, value: unknown): Promise<Buffer> {
   await writeFile(temporary, bytes, { mode: 0o644 });
   await rename(temporary, file);
   return bytes;
+}
+
+const LOCK_FILE = ".control.lock";
+/** A lock older than this is left by a crashed writer and may be broken. */
+const STALE_LOCK_MS = 30_000;
+const LOCK_WAIT_MS = 10_000;
+
+/**
+ * Run one read/modify/write of the control files while holding an exclusive lock
+ * file in the root. The atomic rename alone keeps readers from seeing a torn file
+ * but lets two clients (Codex and Claude Code share the root) both write from a stale
+ * snapshot, resurrecting a revoked grant or dropping a concurrent one. `open(..., "wx")`
+ * is atomic across processes; a lock older than STALE_LOCK_MS is treated as abandoned.
+ */
+async function withControlLock<T>(root: string, run: () => Promise<Result<T>>): Promise<Result<T>> {
+  const lock = path.join(root, LOCK_FILE);
+  try { await mkdir(root, { recursive: true, mode: 0o700 }); }
+  catch { return failure("unavailable", `Cannot create ${root}.`, "Check filesystem permissions for the control root."); }
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const handle = await open(lock, "wx");
+      await handle.writeFile(`${process.pid} ${new Date().toISOString()}\n`);
+      await handle.close();
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") return failure("unavailable", `Cannot lock ${root}.`, "Check filesystem permissions for the control root.");
+      try {
+        const held = await stat(lock);
+        if (Date.now() - held.mtimeMs > STALE_LOCK_MS) { await unlink(lock).catch(() => undefined); continue; }
+      } catch { continue; }
+      if (Date.now() > deadline) return failure("unavailable", "Another GPK client is changing the control files.", "Retry in a moment; if it persists, remove .control.lock from the control root.");
+      await new Promise(resolve => setTimeout(resolve, Math.min(200, 10 * 2 ** Math.min(attempt, 4)) + Math.random() * 20));
+    }
+  }
+  try { return await run(); }
+  finally { await unlink(lock).catch(() => undefined); }
 }
 
 /** Materialize declared defaults around the caller's actual backend selection. */
@@ -240,33 +305,37 @@ export function createLocalControlAdapter(options: LocalControlOptions): UserCon
         return { ok: true, value: { ref: { scope, id: SETTINGS_FILE }, value: parsed as UserSettings, version: digest(read.bytes), coverage: "complete" }, limits };
       },
       initialize: async (input: SettingsInitialization, guard: WriteGuard): Promise<Result<WriteReceipt>> => {
-        if (guard.expected !== undefined) return failure("invalid", "expected must be omitted when initializing.", "Remove expected; resuming an interrupted initialization is not implemented.");
-        const existing = await readControlFile(settingsFile);
-        if (existing.kind === "present") return failure("conflict", `${SETTINGS_FILE} already exists in ${root}.`, "Use settings.update to change it; initialization never resets an existing record.", [{ scope, id: SETTINGS_FILE }]);
-        if (existing.kind === "unreadable") return failure("unavailable", `Cannot inspect ${SETTINGS_FILE} (${existing.message}).`, "Restore access to the control root.");
-        const settings = materializeSettings(input);
-        const problem = validateSettings(settings);
-        if (problem) return failure("invalid", problem, "Supply a complete backend selection with unique configuration IDs.");
-        try { await writeJsonAtomic(settingsFile, settings); }
-        catch { return failure("unavailable", `Cannot write ${SETTINGS_FILE}.`, "Check filesystem permissions for the control root."); }
-        const back = await adapter.settings.read();
-        const verified = back.ok && back.value !== null && JSON.stringify(back.value.value) === JSON.stringify(settings);
-        return { ok: true, value: { affected: [{ scope, id: SETTINGS_FILE }], verified, ...(back.ok && back.value ? { version: back.value.version } : {}), ...(verified ? {} : { recovery: "Read settings back and compare." }) }, limits };
+        return withControlLock(root, async () => {
+          if (guard.expected !== undefined) return failure("invalid", "expected must be omitted when initializing.", "Remove expected; resuming an interrupted initialization is not implemented.");
+          const existing = await readControlFile(settingsFile);
+          if (existing.kind === "present") return failure("conflict", `${SETTINGS_FILE} already exists in ${root}.`, "Use settings.update to change it; initialization never resets an existing record.", [{ scope, id: SETTINGS_FILE }]);
+          if (existing.kind === "unreadable") return failure("unavailable", `Cannot inspect ${SETTINGS_FILE} (${existing.message}).`, "Restore access to the control root.");
+          const settings = materializeSettings(input);
+          const problem = validateSettings(settings);
+          if (problem) return failure("invalid", problem, "Supply a complete backend selection with unique configuration IDs.");
+          try { await writeJsonAtomic(settingsFile, settings); }
+          catch { return failure("unavailable", `Cannot write ${SETTINGS_FILE}.`, "Check filesystem permissions for the control root."); }
+          const back = await adapter.settings.read();
+          const verified = back.ok && back.value !== null && JSON.stringify(back.value.value) === JSON.stringify(settings);
+          return { ok: true, value: { affected: [{ scope, id: SETTINGS_FILE }], verified, ...(back.ok && back.value ? { version: back.value.version } : {}), ...(verified ? {} : { recovery: "Read settings back and compare." }) }, limits };
+        });
       },
       update: async (changes: SettingsChanges, guard: WriteGuard): Promise<Result<WriteReceipt>> => {
-        const current = await adapter.settings.read();
-        if (!current.ok) return current;
-        if (current.value === null) return failure("not-found", `${SETTINGS_FILE} is not initialized.`, "Initialize Settings first.");
-        if (guard.expected !== undefined && guard.expected !== current.value.version) return failure("conflict", "Settings changed since they were read.", "Read Settings again and reapply the change.", [{ scope, id: SETTINGS_FILE }]);
-        const next = applySettingsChanges(current.value.value, changes);
-        if (!next) return failure("invalid", "No field actually changes.", "Supply at least one differing named field.");
-        const problem = validateSettings(next);
-        if (problem) return failure("invalid", problem, "Correct the change.");
-        try { await writeJsonAtomic(settingsFile, next); }
-        catch { return failure("unavailable", `Cannot write ${SETTINGS_FILE}.`, "Check filesystem permissions for the control root."); }
-        const back = await adapter.settings.read();
-        const verified = back.ok && back.value !== null && JSON.stringify(back.value.value) === JSON.stringify(next);
-        return { ok: true, value: { affected: [{ scope, id: SETTINGS_FILE }], verified, ...(back.ok && back.value ? { version: back.value.version } : {}), ...(verified ? {} : { recovery: "Read settings back and compare." }) }, limits };
+        return withControlLock(root, async () => {
+          const current = await adapter.settings.read();
+          if (!current.ok) return current;
+          if (current.value === null) return failure("not-found", `${SETTINGS_FILE} is not initialized.`, "Initialize Settings first.");
+          if (guard.expected !== undefined && guard.expected !== current.value.version) return failure("conflict", "Settings changed since they were read.", "Read Settings again and reapply the change.", [{ scope, id: SETTINGS_FILE }]);
+          const next = applySettingsChanges(current.value.value, changes);
+          if (!next) return failure("invalid", "No field actually changes.", "Supply at least one differing named field.");
+          const problem = validateSettings(next);
+          if (problem) return failure("invalid", problem, "Correct the change.");
+          try { await writeJsonAtomic(settingsFile, next); }
+          catch { return failure("unavailable", `Cannot write ${SETTINGS_FILE}.`, "Check filesystem permissions for the control root."); }
+          const back = await adapter.settings.read();
+          const verified = back.ok && back.value !== null && JSON.stringify(back.value.value) === JSON.stringify(next);
+          return { ok: true, value: { affected: [{ scope, id: SETTINGS_FILE }], verified, ...(back.ok && back.value ? { version: back.value.version } : {}), ...(verified ? {} : { recovery: "Read settings back and compare." }) }, limits };
+        });
       },
     },
     templates: {
@@ -300,35 +369,39 @@ export function createLocalControlAdapter(options: LocalControlOptions): UserCon
         return { ok: true, value: { items, coverage: "complete" }, limits };
       },
       grant: async (input: ControlGrant, guard: WriteGuard): Promise<Result<CreateReceipt<Ref>>> => {
-        if (guard.expected !== undefined) return failure("invalid", "expected must be omitted when granting.", "Remove expected.");
-        if (!input.backendId || !isRef(input.root) || !input.operations.length) return failure("invalid", "A grant needs a backendId, a root reference and at least one operation.", "Correct the grant.");
-        const known = options.knownOperations ? await options.knownOperations() : null;
-        const unknown = input.operations.filter(op => !/^[a-z]+(\.[a-zA-Z]+)+$/.test(op) || (known && !known.includes(op)));
-        if (unknown.length) return failure("invalid", `Unknown or malformed operation IDs: ${unknown.join(", ")}.`, "Grant only implemented port operations; wildcards are rejected.");
-        const current = await adapter.grants.list();
-        if (!current.ok) return current;
-        const entries = current.value.items.map(item => ({ id: item.ref.id.replace(/^grant:/, ""), ...item.value }));
-        const id = `g-${randomUUID().slice(0, 8)}`;
-        entries.push({ id, backendId: input.backendId, root: input.root, operations: [...input.operations], unattended: input.unattended });
-        try { await writeJsonAtomic(grantsFile, { schemaVersion: GRANTS_SCHEMA_VERSION, grants: entries }); }
-        catch { return failure("unavailable", `Cannot write ${GRANTS_FILE}.`, "Check filesystem permissions for the control root."); }
-        const back = await adapter.grants.list();
-        const created: Ref = { scope, id: `grant:${id}` };
-        const verified = back.ok && back.value.items.some(item => item.ref.id === created.id);
-        return { ok: true, value: { created, affected: [created, { scope, id: GRANTS_FILE }], verified, ...(back.ok && back.value.items[0] ? { version: back.value.items[0].version } : {}) }, limits };
+        return withControlLock(root, async () => {
+          if (guard.expected !== undefined) return failure("invalid", "expected must be omitted when granting.", "Remove expected.");
+          if (!input.backendId || !isRef(input.root) || !input.operations.length) return failure("invalid", "A grant needs a backendId, a root reference and at least one operation.", "Correct the grant.");
+          const known = options.knownOperations ? await options.knownOperations() : null;
+          const unknown = input.operations.filter(op => !/^[a-z]+(\.[a-zA-Z]+)+$/.test(op) || (known && !known.includes(op)));
+          if (unknown.length) return failure("invalid", `Unknown or malformed operation IDs: ${unknown.join(", ")}.`, "Grant only implemented port operations; wildcards are rejected.");
+          const current = await adapter.grants.list();
+          if (!current.ok) return current;
+          const entries = current.value.items.map(item => ({ id: item.ref.id.replace(/^grant:/, ""), ...item.value }));
+          const id = `g-${randomUUID().slice(0, 8)}`;
+          entries.push({ id, backendId: input.backendId, root: input.root, operations: [...input.operations], unattended: input.unattended });
+          try { await writeJsonAtomic(grantsFile, { schemaVersion: GRANTS_SCHEMA_VERSION, grants: entries }); }
+          catch { return failure("unavailable", `Cannot write ${GRANTS_FILE}.`, "Check filesystem permissions for the control root."); }
+          const back = await adapter.grants.list();
+          const created: Ref = { scope, id: `grant:${id}` };
+          const verified = back.ok && back.value.items.some(item => item.ref.id === created.id);
+          return { ok: true, value: { created, affected: [created, { scope, id: GRANTS_FILE }], verified, ...(back.ok && back.value.items[0] ? { version: back.value.items[0].version } : {}) }, limits };
+        });
       },
       revoke: async (ref: Ref, guard: WriteGuard): Promise<Result<WriteReceipt>> => {
-        const current = await adapter.grants.list();
-        if (!current.ok) return current;
-        const target = current.value.items.find(item => item.ref.scope === ref.scope && item.ref.id === ref.id);
-        if (!target) return failure("not-found", "No grant with this reference exists.", "List grants to find the current references.", [ref]);
-        if (guard.expected !== undefined && guard.expected !== target.version) return failure("conflict", "The grant store changed since it was read.", "List grants again and retry.", [ref]);
-        const entries = current.value.items.filter(item => item.ref.id !== ref.id).map(item => ({ id: item.ref.id.replace(/^grant:/, ""), ...item.value }));
-        try { await writeJsonAtomic(grantsFile, { schemaVersion: GRANTS_SCHEMA_VERSION, grants: entries }); }
-        catch { return failure("unavailable", `Cannot write ${GRANTS_FILE}.`, "Check filesystem permissions for the control root."); }
-        const back = await adapter.grants.list();
-        const verified = back.ok && !back.value.items.some(item => item.ref.id === ref.id);
-        return { ok: true, value: { affected: [ref, { scope, id: GRANTS_FILE }], verified }, limits };
+        return withControlLock(root, async () => {
+          const current = await adapter.grants.list();
+          if (!current.ok) return current;
+          const target = current.value.items.find(item => item.ref.scope === ref.scope && item.ref.id === ref.id);
+          if (!target) return failure("not-found", "No grant with this reference exists.", "List grants to find the current references.", [ref]);
+          if (guard.expected !== undefined && guard.expected !== target.version) return failure("conflict", "The grant store changed since it was read.", "List grants again and retry.", [ref]);
+          const entries = current.value.items.filter(item => item.ref.id !== ref.id).map(item => ({ id: item.ref.id.replace(/^grant:/, ""), ...item.value }));
+          try { await writeJsonAtomic(grantsFile, { schemaVersion: GRANTS_SCHEMA_VERSION, grants: entries }); }
+          catch { return failure("unavailable", `Cannot write ${GRANTS_FILE}.`, "Check filesystem permissions for the control root."); }
+          const back = await adapter.grants.list();
+          const verified = back.ok && !back.value.items.some(item => item.ref.id === ref.id);
+          return { ok: true, value: { affected: [ref, { scope, id: GRANTS_FILE }], verified }, limits };
+        });
       },
     },
   };

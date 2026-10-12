@@ -4,6 +4,33 @@ All notable changes to GPK will be documented here.
 
 ## Unreleased
 
+- Review fixes (PR #2):
+  - Writes no longer trust a cached Task container or Collection membership:
+    before authorizing, the adapter re-checks that the Projects Collection is
+    still the configured one and that the row is still in it. Reads may use
+    the cache.
+  - Control writes (`settings.initialize/update`, `grants.grant/revoke`) hold a
+    lock file in the control root, so two clients sharing it can neither
+    resurrect a revoked grant nor lose a concurrent one. A lock older than 30 s
+    is broken.
+  - Body edits are verified on read-back for Tasks, Areas, Projects, materials,
+    Sources, Wikis and Outputs; an edit the backend accepted but did not apply
+    is reported `verified: false`.
+  - Setup reads `settings.json` before creating anything in Craft. If Settings
+    fail after the structures were created, Setup returns `partial` with the
+    created references so recovery can adopt them.
+  - Queries that list a record but cannot read it report `partial` coverage
+    and name the record in a limit.
+  - Links from a Daily Note Task are authorized against the Task's real
+    container, so the `daily-notes` grant covers them.
+  - Settings validation checks the connection (endpoint, profile or
+    credentials reference) and all five layout locations. Bootstrap turns any
+    remaining unusable configuration into an `invalid` failure instead of
+    throwing.
+  - Skills, guides, the Codex manifest and `package.json` describe the
+    implemented operations. Routing results into a Wiki or Output, and linking
+    material to a Project, are handoffs to `gpk-ingest`.
+
 - Next-action and review candidates exclude Tasks of planned, paused,
   completed or canceled Projects, even when due: the review inventory lists
   them under `held`, and actual work recorded under a non-active Project under

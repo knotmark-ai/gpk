@@ -118,6 +118,61 @@ const grants = { schemaVersion: 1, grants: [
   console.log("PASS: local control initializes, patches and grants through atomic file writes with digest checks");
 }
 
+// Review finding 2: two clients on one root serialize their read/modify/write.
+{
+  const root = path.join(temporary, "shared-control");
+  const known = async () => ["tasks.create", "tasks.update"];
+  const first = createLocalControlAdapter({ root, knownOperations: known });
+  const second = createLocalControlAdapter({ root, knownOperations: known });
+  const grantOf = id => ({ backendId: "primary", root: { scope: SPACE.id, id }, operations: ["tasks.create"], unattended: false });
+  const old = await first.grants.grant(grantOf("old"), {});
+  assert.equal(old.ok, true, JSON.stringify(old));
+  const [revoked, added] = await Promise.all([first.grants.revoke(old.value.created, {}), second.grants.grant(grantOf("new"), {})]);
+  assert.deepEqual([revoked.ok, added.ok], [true, true]);
+  let roots = (await first.grants.list()).value.items.map(item => item.value.root.id);
+  assert.deepEqual(roots, ["new"], "a concurrent grant neither resurrects the revoked grant nor is lost");
+  const many = await Promise.all(["a", "b", "c", "d"].map((id, index) => (index % 2 ? first : second).grants.grant(grantOf(id), {})));
+  assert.ok(many.every(result => result.ok));
+  roots = (await second.grants.list()).value.items.map(item => item.value.root.id).sort();
+  assert.deepEqual(roots, ["a", "b", "c", "d", "new"], "concurrent grants are all kept");
+  assert.equal((await first.settings.initialize({ knowledgeBackend: settings.knowledgeBackend }, {})).ok, true);
+  await Promise.all([
+    first.settings.update({ preferences: { instructions: "Be brief." } }, {}),
+    second.settings.update({ preferences: { workingLanguage: "zh-CN" } }, {}),
+  ]);
+  const merged = (await first.settings.read()).value.value.preferences;
+  assert.deepEqual([merged.instructions, merged.workingLanguage], ["Be brief.", "zh-CN"], "concurrent Settings updates both land");
+  assert.equal(fs.existsSync(path.join(root, ".control.lock")), false, "the lock is released");
+  fs.writeFileSync(path.join(root, ".control.lock"), "stale");
+  const past = new Date(Date.now() - 60_000);
+  fs.utimesSync(path.join(root, ".control.lock"), past, past);
+  assert.equal((await first.grants.grant(grantOf("after-crash"), {})).ok, true, "a stale lock left by a crashed writer is broken");
+  console.log("PASS: concurrent control writers serialize through a lock file without losing or resurrecting grants");
+}
+
+// Review finding 7: a hand-edited connection without an endpoint is invalid Settings, not an exception.
+{
+  const root = path.join(temporary, "no-endpoint");
+  fs.mkdirSync(root, { recursive: true });
+  const broken = structuredClone(settings);
+  delete broken.knowledgeBackend.configurations[0].connection.endpoint;
+  fs.writeFileSync(path.join(root, "settings.json"), JSON.stringify(broken));
+  const read = await createLocalControlAdapter({ root }).settings.read();
+  assert.equal(read.error.code, "invalid");
+  assert.match(read.error.message, /connection\.endpoint/);
+  const noLocations = structuredClone(settings);
+  delete noLocations.knowledgeBackend.configurations[0].layout.locations.wiki;
+  fs.writeFileSync(path.join(root, "settings.json"), JSON.stringify(noLocations));
+  assert.match((await createLocalControlAdapter({ root }).settings.read()).error.message, /layout\.locations\.wiki/);
+  fs.writeFileSync(path.join(root, "settings.json"), JSON.stringify(broken));
+  const runtime = bootstrap({ env: { GPK_CONTROL_ROOT: root, HOME: temporary }, secrets: memorySecretStore(), createConnection: () => fakeCraft().connection });
+  const status = await runtime.operations.tasksQuery({});
+  assert.equal(status.ok, false);
+  assert.equal(status.error.code, "invalid", "the runtime reports invalid Settings instead of throwing");
+  await runtime.close();
+  console.log("PASS: a connection without an endpoint is rejected as invalid Settings and the runtime does not throw");
+}
+
 // ---------- fake Craft connection with the observed command surface ----------
 function fakeCraft() {
   const tasks = new Map();
@@ -787,8 +842,9 @@ function fakeCraft() {
   await knowledge.projects.read(projectRef);
   const readsBefore = collectionReads();
   await knowledge.projects.read(projectRef);
+  assert.equal(collectionReads(), readsBefore, "reads of known rows do not list the whole Collection again");
   await knowledge.projects.update(projectRef, { edits: [{ before: "证明端到端可用：已完成", after: "证明端到端可用：已完成。" }] }, { grant: projectGrant });
-  assert.equal(collectionReads(), readsBefore, "known rows are not re-checked against the whole Collection");
+  assert.equal(collectionReads(), readsBefore + 1, "a write checks membership once against a fresh listing, and its read-back reuses it");
   const unrelated = await knowledge.sources.create({ title: "Unrelated paper", content: "Nothing links anywhere." }, { grant: sourceGrant });
   const callsBeforeLinks = fake.calls.length;
   const viaSearch = await knowledge.links.query(outputRef);
@@ -873,6 +929,82 @@ function fakeCraft() {
   const systemPage = fake.documents.get(hostRootId).body.find(b => b.markdown === "GPK System");
   assert.equal(systemPage.children.filter(p => p.markdown === "ingest/o'brien").length, 1, "saving again replaces, not duplicates");
   console.log("PASS: rows, materials and Tasks stay inside their configured containers; apostrophes survive JSON arguments");
+
+  // Review finding 1: authorization re-resolves a cached container instead of trusting it.
+  {
+    const step = await knowledge.tasks.create({ title: "Bound to the slice", content: "", state: "todo", project: projectRef }, { grant: projectGrant });
+    assert.equal(step.ok, true, JSON.stringify(step));
+    const stepRef = step.value.created;
+    assert.equal((await knowledge.tasks.read(stepRef)).ok, true, "the read caches the container");
+    const configured = layoutLocations;
+    layoutLocations = { ...configured, project: configured.area };
+    const afterLayoutChange = await knowledge.tasks.update(stepRef, { title: "Under a stale layout" }, { grant: projectGrant });
+    layoutLocations = configured;
+    assert.ok(!afterLayoutChange.ok && ["unauthorized", "not-found"].includes(afterLayoutChange.error.code), "a layout change invalidates the cached Project container: " + JSON.stringify(afterLayoutChange));
+    assert.notEqual(fake.tasks.get(stepRef.id).line, "Under a stale layout");
+    assert.equal((await knowledge.tasks.read(stepRef)).ok, true);
+    const projects = fake.collections.get(layoutLocations.project.id);
+    const holder = [...fake.collections.values()].find(c => c.id !== projects.id && c.rows);
+    const row = projects.rows.find(r => r.id === projectRef.id);
+    projects.rows.splice(projects.rows.indexOf(row), 1);
+    holder.rows.push(row);
+    const afterMove = await knowledge.tasks.update(stepRef, { title: "In a moved row" }, { grant: projectGrant });
+    holder.rows.splice(holder.rows.indexOf(row), 1);
+    projects.rows.push(row);
+    assert.ok(!afterMove.ok && ["unauthorized", "not-found"].includes(afterMove.error.code), "a row that left the Projects Collection no longer authorizes its Tasks: " + JSON.stringify(afterMove));
+    assert.notEqual(fake.tasks.get(stepRef.id).line, "In a moved row");
+  }
+  console.log("PASS: a cached Task container is re-checked against the current layout and Collection before a write");
+
+  // Review finding 3: an edit the backend silently drops is reported unverified.
+  {
+    const write = fake.connection.write;
+    const dropEdits = async command => command.startsWith("blocks update") ? { ok: true, value: "Updated 1 block(s)", limits: [] } : write(command);
+    const step = await knowledge.tasks.create({ title: "Silent drop", content: "Original body", state: "todo" }, { grant });
+    const note = await knowledge.wikis.create({ title: "Silent wiki", content: "Original wiki body" }, { grant: wikiGrant });
+    fake.connection.write = dropEdits;
+    try {
+      const taskEdit = await knowledge.tasks.update(step.value.created, { edits: [{ before: "Original body", after: "Changed body" }] }, { grant });
+      assert.equal(taskEdit.value?.verified, false, "a dropped Task body edit is unverified: " + JSON.stringify(taskEdit));
+      const wikiEdit = await knowledge.wikis.update(note.value.created, { edits: [{ before: "Original wiki body", after: "Changed wiki body" }] }, { grant: wikiGrant });
+      assert.equal(wikiEdit.value?.verified, false, "a dropped Wiki body edit is unverified: " + JSON.stringify(wikiEdit));
+      const projectEdit = await knowledge.projects.update(otherProject.value.created, { edits: [{ before: "", after: "x" }] }, { grant: projectGrant });
+      assert.ok(!projectEdit.ok || projectEdit.value.verified === false, "a dropped Project body edit is never verified");
+    } finally {
+      fake.connection.write = write;
+    }
+  }
+  console.log("PASS: body edits the backend accepted but did not apply are reported as unverified");
+
+  // Review finding 5: a listed record that cannot be read makes the page partial.
+  {
+    const broken = await knowledge.wikis.create({ title: "Unreadable wiki", content: "Body" }, { grant: wikiGrant });
+    const readFull = fake.connection.readFull;
+    fake.connection.readFull = async command => command.startsWith(`blocks get --id ${broken.value.created.id} `)
+      ? { ok: false, error: { code: "unavailable", message: "Failed to read block", affected: [], next: "" } }
+      : readFull(command);
+    try {
+      const listed = await knowledge.wikis.query({});
+      assert.equal(listed.ok, true, JSON.stringify(listed));
+      assert.ok(!listed.value.items.some(item => item.ref.id === broken.value.created.id));
+      assert.equal(listed.value.coverage, "partial", "an omitted record is not complete coverage");
+      assert.ok(listed.limits.some(limit => limit.includes(broken.value.created.id)), JSON.stringify(listed.limits));
+    } finally {
+      fake.connection.readFull = readFull;
+    }
+  }
+  console.log("PASS: a listed but unreadable Wiki leaves the query partial with a limit naming it");
+
+  // Review finding 6: a Daily Note Task links under the daily-notes grant.
+  {
+    const dailyStep = await knowledge.tasks.create({ title: "Read the Collections wiki", content: "", state: "todo" }, { grant });
+    const dailyLinks = { ...grant, operations: [...grant.operations, "links.add", "links.remove"] };
+    const linked = await knowledge.links.add({ from: dailyStep.value.created, to: wikiRef, context: "Background for today" }, { grant: dailyLinks });
+    assert.equal(linked.ok, true, "the daily-notes wildcard covers links from a Daily Note Task: " + JSON.stringify(linked));
+    assert.equal(linked.value.verified, true);
+    assert.equal((await knowledge.links.add({ from: dailyStep.value.created, to: wikiRef, context: "again" }, { grant: projectGrant })).error.code, "unauthorized", "a Project grant does not cover a Daily Note Task");
+  }
+  console.log("PASS: links from a Daily Note Task are authorized by the daily-notes grant");
 
   // Operations resolve grants from the control store; tool arguments carry none.
   const root = path.join(temporary, "control");
@@ -965,6 +1097,36 @@ function fakeCraft() {
   const updatedPrefs = await setupOps2.settingsUpdate({ preferences: { instructions: "中文优先" } });
   assert.equal(updatedPrefs.value.verified, true);
   console.log("PASS: Setup establishes the Craft layout, initializes Settings and persists the confirmed default grants");
+
+  // Review finding 4: Setup checks the control store before creating anything in Craft.
+  {
+    const plan = { hostDocument: { title: "GPK" }, areas: { name: "Areas" }, projects: { name: "Projects" }, sources: { name: "Sources" }, wikis: { name: "Wikis" }, outputs: { name: "Outputs" } };
+    const brokenRoot = path.join(temporary, "broken-setup-control");
+    fs.mkdirSync(brokenRoot, { recursive: true });
+    fs.writeFileSync(path.join(brokenRoot, "settings.json"), "{not json");
+    const untouched = fakeCraft();
+    const untouchedBinding = { ...setupBinding, connection: untouched.connection, knowledge: createCraftAdapter({ connection: untouched.connection, backendId: "craft" }) };
+    const brokenOps = createOperations({ controlRoot: brokenRoot, control: createLocalControlAdapter({ root: brokenRoot }), binding: async () => ({ ok: false, error: { code: "unavailable", message: "no settings", affected: [], next: "" } }), setupBinding: async () => ({ ok: true, value: untouchedBinding, limits: [] }) });
+    const refused = await brokenOps.setupEstablish(plan);
+    assert.equal(refused.error.code, "invalid", JSON.stringify(refused));
+    assert.match(refused.error.next, /Nothing was created/);
+    assert.equal(untouched.calls.filter(([kind]) => kind === "write").length, 0, "malformed settings.json stops Setup before any Craft write");
+
+    const flakyRoot = path.join(temporary, "flaky-setup-control");
+    const flakyControl = createLocalControlAdapter({ root: flakyRoot });
+    let reads = 0;
+    const realRead = flakyControl.settings.read;
+    flakyControl.settings.read = async () => ++reads === 1 ? realRead() : { ok: false, error: { code: "unavailable", message: "settings.json became unreadable", affected: [], next: "Restore access to the control root." } };
+    const created = fakeCraft();
+    const createdBinding = { ...setupBinding, connection: created.connection, knowledge: createCraftAdapter({ connection: created.connection, backendId: "craft" }) };
+    const flakyOps = createOperations({ controlRoot: flakyRoot, control: flakyControl, binding: async () => ({ ok: false, error: { code: "unavailable", message: "no settings", affected: [], next: "" } }), setupBinding: async () => ({ ok: true, value: createdBinding, limits: [] }) });
+    const half = await flakyOps.setupEstablish(plan);
+    assert.equal(half.error.code, "partial", JSON.stringify(half));
+    const createdIds = [...created.folders.keys(), ...created.documents.keys()];
+    assert.ok(half.error.affected.length >= 5 && half.error.affected.every(ref => createdIds.includes(ref.id) || [...created.collections.values()].some(c => c.id === ref.id || c.documentId === ref.id)), "the created Craft references are reported for recovery: " + JSON.stringify(half.error.affected));
+    assert.match(half.error.next, /adopting the created structures/);
+  }
+  console.log("PASS: Setup refuses unreadable Settings before touching Craft and reports created structures when Settings fail afterwards");
 
   // Bootstrap resolves the binding from Settings and uses the injected secret store.
   const booted = bootstrap({ env: { GPK_CONTROL_ROOT: root, HOME: temporary }, secrets: memorySecretStore(), createConnection: () => fake.connection });

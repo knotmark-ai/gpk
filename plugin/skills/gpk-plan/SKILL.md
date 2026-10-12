@@ -19,8 +19,9 @@ title text), create with state and primary Area, rename, edit the body,
 transition between planned / active / paused / completed / canceled, change the
 primary Area, reorder Tasks, and list, read, append or edit process material.
 Tasks: create under a Project in plan order and move a Task between a Project
-and standalone. Sources, Wikis, Outputs and links return `unsupported`; say so
-and keep the relevant text in the Project body instead.
+and standalone. Registering a Source, writing a Wiki or Output, and linking
+them to the Project belong to `gpk-ingest`; hand off there rather than pasting
+that material into the Project body.
 
 ## Frame a Project
 

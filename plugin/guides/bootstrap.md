@@ -1,8 +1,8 @@
 # Bootstrap and read-only assessment
 
-Supporting context guidance, not an implemented Setup workflow. The engineering
-skeleton entrypoints use the [MCP invocation guide](mcp.md) and cannot perform
-control or knowledge reads until the corresponding adapters are implemented.
+Supporting context guidance, not the Setup workflow: `gpk-setup` establishes
+GPK through the onboarding page. Operations follow the
+[MCP invocation guide](mcp.md).
 
 Use this procedure for a GPK readiness check or assessment of existing notes.
 It produces an answer in the conversation, not a persistent configuration file,

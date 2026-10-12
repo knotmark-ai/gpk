@@ -211,18 +211,23 @@ export function createOperations(options: OperationsOptions) {
       return { ok: true, value: inspection, limits };
     },
     async setupEstablish(plan: SetupPlan): Promise<Result<{ locations: KnowledgeBackendConfiguration["layout"]["locations"]; created: Ref[]; adopted: Ref[]; settings: WriteReceipt }>> {
+      // Preflight the local control store before touching Craft: an unreadable or invalid
+      // settings.json would otherwise let Craft structures be created that Settings can
+      // never record. The diagnostic fallback of setupBinding does not authorize this path.
+      const preflight = await control.settings.read();
+      if (!preflight.ok) return { ok: false, error: { ...preflight.error, next: `Nothing was created in the knowledge base. ${preflight.error.next}` } };
       const bound = await setupBinding();
       if (!bound.ok) return bound;
       const scoped = await bound.value.connection.space();
       if (!scoped.ok) return scoped;
       const { preferences, ...layoutPlan } = plan;
-      const settingsForDefaults = await control.settings.read();
-      const configured = settingsForDefaults.ok && settingsForDefaults.value ? settingsForDefaults.value.value.preferences.metadataLanguage : "en";
+      const configured = preflight.value ? preflight.value.value.preferences.metadataLanguage : "en";
       const metadataLanguage = preferences?.metadataLanguage ?? (configured === "zh-CN" ? "zh-CN" : "en");
       const established = await bound.value.knowledge.layout.establish({ ...layoutPlan, metadataLanguage });
       if (!established.ok) return established;
       const current = await control.settings.read();
-      if (!current.ok) return current;
+      // Control failed after Craft changed: report the created references so recovery adopts them.
+      if (!current.ok) return { ok: false, error: { ...current.error, code: "partial", affected: [...established.value.created, ...current.error.affected], next: `Craft structures were created but Settings could not be read: ${current.error.next} Rerun Setup adopting the created structures instead of creating them again.` } };
       const configuration: KnowledgeBackendConfiguration = {
         id: bound.value.backendId, adapter: "craft", instance: scoped.value.id,
         connection: { kind: "mcp", transport: "http", endpoint: { kind: "public-url", url: bound.value.endpoint }, credentialsRef: bound.value.secretKey },
