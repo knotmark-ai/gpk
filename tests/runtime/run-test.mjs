@@ -239,6 +239,28 @@ function fakeCraft() {
         const rows = [...documents.entries()].filter(([, d]) => d.folderId === m[1]).map(([id, d]) => `  <${id}> ${d.title}`);
         return { ok: true, value: [`${rows.length} document(s) — format: <rootBlockId> Title`, "", ...rows].join("\n"), limits: [] };
       }
+      if ((m = command.match(/^search --include ("(?:[^"\\]|\\.)*")((?: --folder \S+)*)(?: --cursor \S+)?$/))) {
+        // Case-insensitive text match over documents, Collection rows and their Tasks, grouped by document.
+        const needle = JSON.parse(m[1]).toLowerCase();
+        const folders = [...m[2].matchAll(/--folder (\S+)/g)].map(f => f[1]);
+        const hits = new Map();
+        const hit = (documentId, blockId) => { if (!hits.has(documentId)) hits.set(documentId, []); hits.get(documentId).push(blockId); };
+        const walk = (documentId, list) => { for (const b of list ?? []) { if ((b.markdown ?? "").toLowerCase().includes(needle)) hit(documentId, b.id); if (b.children) walk(documentId, b.children); } };
+        for (const [rootId, doc] of documents) {
+          if (folders.length && !folders.includes(doc.folderId)) continue;
+          if (doc.title.toLowerCase().includes(needle)) hit(rootId, rootId);
+          walk(rootId, doc.body);
+        }
+        if (!folders.length) for (const c of collections.values()) for (const row of c.rows ?? []) {
+          if (row.title.toLowerCase().includes(needle)) hit(c.documentId, row.id);
+          for (const child of row.children) {
+            const text = child.taskId ? [tasks.get(child.taskId).line, ...tasks.get(child.taskId).children.map(x => x.markdown)].join("\n") : child.markdown ?? "";
+            if (text.toLowerCase().includes(needle)) hit(c.documentId, child.id);
+          }
+        }
+        if (!hits.size) return { ok: true, value: "No matches found for the provided search criteria.", limits: [] };
+        return { ok: true, value: [`Search results: ${hits.size} match(es)`, "", ...[...hits.entries()].flatMap(([doc, blocks], i) => [`${i + 1}) Document <${doc}>`, `   Blocks: ${blocks.join(", ")}`, ""])].join("\n"), limits: [] };
+      }
       if (command === "documents list --location templates") {
         const rows = [...documents.entries()].filter(([, d]) => d.location === "templates").map(([id, d]) => `  <${id}> ${d.title}`);
         return { ok: true, value: [`${rows.length} document(s) — format: <rootBlockId> Title`, "", ...rows].join("\n"), limits: [] };
@@ -731,6 +753,20 @@ function fakeCraft() {
   assert.equal(replaced.ok, true, JSON.stringify(replaced)); assert.equal(replaced.value.verified, true);
   assert.equal((await knowledge.checkpoints.read("ingest/example")).value.value, "cursor=2");
   assert.equal((await knowledge.checkpoints.read("ingest/other")).value, null);
+  // Performance: no whole-Collection read per row operation, no body scan of unrelated documents.
+  const collectionReads = () => fake.calls.filter(([, c]) => c === `blocks get --id ${layoutLocations.project.id} --format json --depth 1`).length;
+  await knowledge.projects.read(projectRef);
+  const readsBefore = collectionReads();
+  await knowledge.projects.read(projectRef);
+  await knowledge.projects.update(projectRef, { edits: [{ before: "证明端到端可用：已完成", after: "证明端到端可用：已完成。" }] }, { grant: projectGrant });
+  assert.equal(collectionReads(), readsBefore, "known rows are not re-checked against the whole Collection");
+  const unrelated = await knowledge.sources.create({ title: "Unrelated paper", content: "Nothing links anywhere." }, { grant: sourceGrant });
+  const callsBeforeLinks = fake.calls.length;
+  const viaSearch = await knowledge.links.query(outputRef);
+  assert.deepEqual(viaSearch.value.items.map(l => l.from.kind).sort(), ["Task"], JSON.stringify(viaSearch));
+  assert.ok(!fake.calls.slice(callsBeforeLinks).some(([, c]) => c.includes(unrelated.value.created.id)), "documents that do not mention the target are not read");
+  assert.ok(viaSearch.limits.some(l => /searching the target's title/.test(l)));
+  assert.deepEqual((await knowledge.sources.query({ text: "Nothing links" })).value.items.map(i => i.ref.id), [unrelated.value.created.id], "text queries match bodies through search");
   console.log("PASS: Sources, Wikis and Outputs are folder documents; links live in record bodies; checkpoints in the GPK System page");
 
   // A dedicated workspace: the default plan puts everything at the top level.

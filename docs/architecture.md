@@ -821,6 +821,25 @@ methodology author advises a fresh start with the old material frozen as
 cold storage, and Craft confines links to one space. Decide this after the
 first end-to-end milestone, with usage evidence from the fresh-space path.
 
+## Classification and archiving (decisions of 2026-10-12)
+
+- **Tables only where the set is bounded.** Areas (enumerable) and Projects live
+  as two tables on the home page. Sources, Wikis and Outputs stay documents in
+  folders: they are long-form and keep growing, and Craft recommends keeping a
+  Collection under about 1,000 rows, with no item templates and no views shown
+  outside the document that holds the table (see the 2026-10-12 checks in the
+  [Craft mapping](adapters/craft.md)).
+- **No type tags for now.** Tags would serve people only (the Agent reads type
+  from the body and finds records through search), and the owner browses
+  material by domain or topic, not by type. A topic or domain tag system and a
+  folder classification for Sources/Wikis/Outputs are deferred until real use
+  shows what to browse by. One candidate to weigh then: a topic Wiki that the
+  related Sources link to already gives a topic view through Craft's backlinks.
+- **Archiving completed Projects is manual.** The default Projects view shows
+  open work; the user may copy a finished Project elsewhere. Craft refuses to
+  move a row out of its Collection, and GPK stores no Project IDs, so this
+  breaks nothing in GPK; links pointing to the old row stop resolving.
+
 ## Data authority, failure and recovery
 
 The [storage contracts](storage-contracts.md) own persistent-data authority,

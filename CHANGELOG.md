@@ -4,6 +4,13 @@ All notable changes to GPK will be documented here.
 
 ## Unreleased
 
+- Performance: Area and Project operations cache Collection membership instead
+  of reading the whole table on every call; Source/Wiki/Output text queries use
+  folder-scoped Craft search and now match bodies; incoming links are found by
+  searching the target's title and reading only matching records, with a full
+  scan as fallback.
+- The onboarding page draws the home page as one page holding the Areas and
+  Projects tables, and calls it the home page.
 - Setup is a local web page. `gpk_setup_open` opens it from the runtime; the
   user connects a knowledge base (Craft today; Notion, Obsidian and Lark shown
   as coming soon), picks a dedicated or shared workspace, languages and

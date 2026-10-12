@@ -99,6 +99,31 @@ export function createDocumentOperations(ctx: CraftContext, collections: ReturnT
     return block;
   }
 
+  /**
+   * Craft full-text search (titles and bodies, about 0.5 s per call). Returns the
+   * matching documents with the matching block IDs. Search does not index link
+   * targets, so callers search for visible text such as a record's title.
+   */
+  async function search(text: string, scope = ""): Promise<Result<{ documentId: string; blockIds: string[] }[]>> {
+    const hits: { documentId: string; blockIds: string[] }[] = [];
+    let command = `search --include ${JSON.stringify(text)}${scope}`;
+    for (let page = 0; page < 10; page++) {
+      const result = await ctx.connection.read(command);
+      if (!result.ok) return result;
+      let current: { documentId: string; blockIds: string[] } | null = null;
+      for (const line of result.value.split("\n")) {
+        const doc = line.match(/^\s*\d+\)\s+Document\s+<([^>]+)>/);
+        if (doc) { current = { documentId: doc[1]!, blockIds: [] }; hits.push(current); continue; }
+        const blocks = line.match(/^\s+Blocks:\s+(.*)$/);
+        if (blocks && current) current.blockIds.push(...(blocks[1]!.match(new RegExp(UUID.source, "g")) ?? []));
+      }
+      const next = result.value.match(/--cursor\s+"?([^"\s]+)"?/)?.[1];
+      if (!next) break;
+      command = `search --include ${JSON.stringify(text)}${scope} --cursor ${next}`;
+    }
+    return { ok: true, value: hits, limits: [] };
+  }
+
   function parseCursor(cursor: string | undefined, tag: string): Result<number> {
     if (cursor === undefined) return { ok: true, value: 0, limits: [] };
     const decoded = Buffer.from(cursor, "base64url").toString("utf8");
@@ -146,7 +171,14 @@ export function createDocumentOperations(ctx: CraftContext, collections: ReturnT
           candidates = candidates.filter(row => related.value.ids.has(row.id.toLowerCase()));
           limits.push(...related.value.limits);
         }
-        if (query.text) { candidates = candidates.filter(row => row.title.includes(query.text!)); limits.push(`text matched ${kind} titles only.`); }
+        if (query.text) {
+          // Title or body: a folder-scoped search finds body matches without reading every document.
+          const found = await search(query.text, ` --folder ${folder.value}`);
+          const matched = new Set(found.ok ? found.value.map(hit => hit.documentId.toLowerCase()) : []);
+          candidates = candidates.filter(row => row.title.includes(query.text!) || matched.has(row.id.toLowerCase()));
+          if (!found.ok) limits.push(`Search was unavailable (${found.error.message}); text matched ${kind} titles only.`);
+          else limits.push("text matched titles and bodies through Craft search, which ignores case and may split words differently from a literal substring.");
+        }
         const page = candidates.slice(offset.value, offset.value + limit);
         const blocks = await ctx.readBlocks(page.map(row => row.id), 1); if (!blocks.ok) return blocks;
         const items: Snapshot<V, R>[] = [];
@@ -272,9 +304,21 @@ export function createDocumentOperations(ctx: CraftContext, collections: ReturnT
     const records = await inventory(); if (!records.ok) return records;
     const own = await endpoint(ref, records.value); if (!own.ok) return own;
     const limits: string[] = [];
-    // Incoming: scan every record body (rows at depth 2 so Task bodies inside them count).
-    const rowIds = [...records.value.values()].filter(r => r.kind === "Area" || r.kind === "Project").map(r => r.id);
-    const docIds = [...records.value.values()].filter(r => r.kind !== "Area" && r.kind !== "Project").map(r => r.id);
+    // Incoming links carry the target's title as their visible text, so a title search
+    // narrows the documents to read; Area and Project rows (a bounded set) are always
+    // read. Without a usable title or search, every GPK record body is scanned.
+    const allRows = [...records.value.values()].filter(r => r.kind === "Area" || r.kind === "Project").map(r => r.id);
+    let docIds = [...records.value.values()].filter(r => r.kind !== "Area" && r.kind !== "Project").map(r => r.id);
+    const rowIds = allRows;
+    const title = own.value.title.trim();
+    const found = title ? await search(title) : null;
+    if (found?.ok) {
+      const hitDocs = new Set(found.value.map(hit => hit.documentId.toLowerCase()));
+      docIds = docIds.filter(id => hitDocs.has(id.toLowerCase()));
+      limits.push("Incoming links were found by searching the target's title; a link whose visible text no longer matches the title is missed.");
+    } else if (found) {
+      limits.push(`Search was unavailable (${found.error.message}); every GPK record body was scanned instead.`);
+    }
     const rows = await ctx.readBlocks(rowIds, 2); if (!rows.ok) return rows;
     const docs = await ctx.readBlocks(docIds, 1); if (!docs.ok) return docs;
     const bodies: { from: LinkEndpoint; block: CraftBlock }[] = [];
@@ -291,7 +335,7 @@ export function createDocumentOperations(ctx: CraftContext, collections: ReturnT
       if (body.from.id.toLowerCase() === ref.id.toLowerCase()) continue;
       for (const { link } of linksIn(body.block, body.from, records.value, tasks.value)) if (link.to.id.toLowerCase() === ref.id.toLowerCase()) incoming.push(link);
     }
-    limits.push("Incoming links come from scanning Area, Project (with their Tasks), Source, Wiki and Output bodies; links written by standalone Tasks are not found.");
+    limits.push("Links written by standalone Tasks in Daily Notes are not found.");
     return { ok: true, value: { outgoing, incoming, limits }, limits: [] };
   }
 

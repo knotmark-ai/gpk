@@ -88,6 +88,12 @@ type ListedItem = { id: string; title: string; status?: string; areaId?: string;
 
 export function createCollectionOperations(ctx: CraftContext) {
   const schemaTitles = new Map<string, string>();
+  /**
+   * Row IDs seen per Collection. Craft never moves a row between Collections, so a
+   * cached member stays a member; a miss refreshes the listing once. This keeps the
+   * containment check from re-reading a large Collection on every row operation.
+   */
+  const members = new Map<string, Set<string>>();
 
   async function locations(): Promise<Result<{ project: string; area: string }>> {
     const layout = await ctx.layout();
@@ -129,6 +135,7 @@ export function createCollectionOperations(ctx: CraftContext) {
       cursor = block.nextCursor;
       if (!cursor) break;
     }
+    members.set(collectionId.toLowerCase(), new Set(items.map(item => item.id.toLowerCase())));
     return { ok: true, value: items, limits: [] };
   }
 
@@ -141,9 +148,11 @@ export function createCollectionOperations(ctx: CraftContext) {
     if (block.value.type !== "collectionItem") return failure("invalid", `The block is not a Collection row.`, `Use the operations of the entity this block belongs to.`, [ref]);
     // A row block does not name its Collection, so membership is checked against the
     // configured Collection's items; a row of any other Collection is not this entity.
-    const rows = await listItems(collectionId);
-    if (!rows.ok) return rows;
-    if (!rows.value.some(row => row.id.toLowerCase() === ref.id.toLowerCase())) return failure("not-found", `The row is not in the ${kind}s Collection.`, `Resolve the ${kind} again; rows of other Collections are not GPK ${kind}s.`, [ref]);
+    if (!members.get(collectionId.toLowerCase())?.has(ref.id.toLowerCase())) {
+      const rows = await listItems(collectionId);
+      if (!rows.ok) return rows;
+      if (!members.get(collectionId.toLowerCase())?.has(ref.id.toLowerCase())) return failure("not-found", `The row is not in the ${kind}s Collection.`, `Resolve the ${kind} again; rows of other Collections are not GPK ${kind}s.`, [ref]);
+    }
     return { ok: true, value: block.value, limits: [] };
   }
 
@@ -246,6 +255,7 @@ export function createCollectionOperations(ctx: CraftContext) {
       const id = createdRowId(added.value, loc.value.area);
       if (!id) return failure("uncertain", "Craft did not report the created row ID.", "List Areas to find the new row before retrying.");
       const ref: AreaRef = { kind: "Area", scope: scoped.value.id, id };
+      members.get(loc.value.area.toLowerCase())?.add(id.toLowerCase());
       if (input.content.trim()) {
         const body = await appendNote(id, input.content);
         if (!body.ok) return { ok: false, error: { ...body.error, code: "partial", affected: [ref], next: "The Area row exists without its body; add the body with areas.update." } };
@@ -419,6 +429,7 @@ export function createCollectionOperations(ctx: CraftContext) {
       const id = createdRowId(added.value, loc.value.project);
       if (!id) return failure("uncertain", "Craft did not report the created row ID.", "List Projects to find the new row before retrying.");
       const ref: ProjectRef = { kind: "Project", scope: scoped.value.id, id };
+      members.get(loc.value.project.toLowerCase())?.add(id.toLowerCase());
       if (input.content.trim()) {
         const body = await appendNote(id, input.content);
         if (!body.ok) return { ok: false, error: { ...body.error, code: "partial", affected: [ref], next: "The Project row exists without its body; add the body with projects.update." } };
