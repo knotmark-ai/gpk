@@ -13,6 +13,8 @@ All notable changes to GPK will be documented here.
   Project; previously the Projects grant could edit rows of other Collections
   and any page in the space.
 - Fix: apostrophes in JSON arguments are escaped instead of stripped.
+- Fix: completing or canceling a `doing`/`waiting` Task removes its state tag
+  from the action line.
 - Implement the Review slice: a read-only `gpk_review_inventory` that reads
   the reviewed population in one call (Inbox captures; overdue, today,
   upcoming, doing, waiting and unscheduled Tasks; Projects by state with

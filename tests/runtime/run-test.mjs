@@ -496,6 +496,7 @@ function fakeCraft() {
   assert.ok(fake.tasks.get(newRef.id).children.at(-1).markdown.startsWith("waiting ("), "the reason is appended as a child block");
   const done = await knowledge.tasks.transition(newRef, "done", "Submitted and confirmed", { grant });
   assert.equal(done.value.verified, true);
+  assert.equal(fake.tasks.get(newRef.id).line, "Submit the dinner reimbursement (R-2291)", "completing a waiting Task removes its state tag");
   assert.equal((await knowledge.tasks.read(newRef)).value.value.state, "done");
   assert.equal((await knowledge.tasks.transition(newRef, "waiting", "no", { grant })).error.code, "conflict", "done can only reopen to todo");
   assert.equal((await knowledge.tasks.transition(newRef, "todo", "", { grant })).error.code, "invalid");

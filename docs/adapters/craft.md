@@ -138,8 +138,10 @@ representation choice and is independent of the transport that carries it.
   `waiting` are a line-end tag `#gpk/task/doing` or `#gpk/task/waiting` on the
   action line, visible in `tasks list` without reading children. The adapter
   re-emits the tag on every title change because `tasks update --markdown`
-  replaces the whole line. A native terminal checkbox takes precedence over a
-  stale tag; report the mismatch and repair only with authorization.
+  replaces the whole line. Moving to `done` or `canceled` drops the tag in the
+  same `tasks update` (`--state` and `--markdown` together, verified
+  2026-10-12). A native terminal checkbox still takes precedence over a stale
+  tag written by hand; report the mismatch and repair only with authorization.
 - **Task time:** the adjustable time is `taskInfo.scheduleDate`, written with the
   JSON update and cleared with `null`. The native deadline is a fixed constraint
   that GPK reads but never reschedules.

@@ -716,8 +716,11 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
       const from = stateOf(block.taskInfo?.state, parsed.tagState);
       if (!TRANSITIONS[from].includes(state)) return failure("conflict", `A ${from} Task cannot move to ${state}.`, "Read the current state and choose a valid transition.", [ref]);
       const parts = [`tasks update --task ${ref.id}`];
-      if (state === "done" || state === "canceled") parts.push(`--state ${state}`);
-      else {
+      if (state === "done" || state === "canceled") {
+        parts.push(`--state ${state}`);
+        // The native checkbox now carries the state; a leftover doing/waiting tag would contradict it.
+        if (parsed.tagState) parts.push(`--markdown ${JSON.stringify(renderActionLine(parsed.title, state))}`);
+      } else {
         parts.push(`--markdown ${JSON.stringify(renderActionLine(parsed.title, state))}`);
         if (from === "done" || from === "canceled") parts.push("--state todo");
       }
@@ -726,7 +729,7 @@ export function createCraftAdapter(options: CraftAdapterOptions): CraftKnowledge
       const stamp = todayIn(spaceCache?.timezone ?? "UTC");
       const note = await connection.write(`blocks add --id ${ref.id} --markdown ${JSON.stringify(`${state} (${stamp}): ${reason.trim()}`)}`);
       if (!note.ok) return { ok: false, error: { ...note.error, code: "partial", affected: [ref], next: "The state changed but the reason was not recorded; add it with tasks.update." } };
-      return verifyTask(ref, task => task.state === state, "Read the Task back; the state change may not have persisted.");
+      return verifyTask(ref, (task, after) => task.state === state && parseActionLine(after.markdown ?? "").tagState === (TAG_STATES.includes(state as "doing") ? state : undefined), "Read the Task back; the state change may not have persisted.");
     },
     async assignProject(ref, project, reason, guard) {
       if (!reason.trim()) return failure("invalid", "Reassigning ownership needs a nonblank reason.", "Explain the change.");
