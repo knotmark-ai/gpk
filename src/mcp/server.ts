@@ -292,7 +292,7 @@ export function createGpkServer(operations: Operations, version: string, onboard
     inputSchema: z.strictObject({ link: linkInput, expected }), annotations: destructive,
   }, async args => response(await operations.linksRemove(args.link, args.expected)));
   server.registerTool("gpk_review_inventory", {
-    description: "Read the population for a daily, weekly or monthly review in one call: Inbox captures, overdue/today/upcoming/doing/waiting/unscheduled Tasks, Projects by state with attention signals, Areas with their Project counts, and what was not traversed. Read-only; decisions stay with the Agent.",
+    description: "Read the population for a daily, weekly or monthly review in one call: Inbox captures, executable Tasks (standalone and of active Projects) as overdue/today/upcoming/doing/waiting/unscheduled, held Tasks of planned or paused Projects, discrepancies (actual work recorded under a non-active Project), Projects by state with attention signals, Areas with their Project counts, and what was not traversed. Read-only; decisions stay with the Agent.",
     inputSchema: z.strictObject({ cadence: z.enum(["daily", "weekly", "monthly"]), horizonDays: z.number().int().min(0).max(366).optional() }), annotations: readOnly,
   }, async args => response(await operations.reviewInventory(args.cadence, args.horizonDays)));
   server.registerTool("gpk_checkpoints_read", {

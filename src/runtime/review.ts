@@ -25,7 +25,19 @@ export type ReviewInventory = {
   /** Planned dates up to and including this day count as upcoming. */
   horizon: string;
   captures: { inbox: { ref: CaptureRef; content: string }[] };
+  /** Executable candidates: standalone Tasks and Tasks of active Projects only. */
   actions: { overdue: ReviewTask[]; today: ReviewTask[]; upcoming: ReviewTask[]; doing: ReviewTask[]; waiting: ReviewTask[]; unscheduled: ReviewTask[] };
+  /**
+   * Open Tasks whose Project is planned or paused. A date arriving does not make
+   * them executable; they wait for the Project's activation or resumption.
+   */
+  held: (ReviewTask & { projectState: ProjectState })[];
+  /**
+   * Actual work recorded under a Project that is not active (doing or done under a
+   * planned Project, doing under a paused one). Kept as evidence and surfaced for
+   * Review; nothing is activated or reset.
+   */
+  discrepancies: (ReviewTask & { projectState: ProjectState; reason: string })[];
   projects: Record<ProjectState, ReviewProject[]>;
   areas: { ref: AreaRef; title: string; state?: "active" | "inactive"; projects: Record<ProjectState, number> }[];
   /** What was traversed; a partial coverage means some records were not seen. */
@@ -93,6 +105,8 @@ export async function reviewInventory(knowledge: KnowledgeBackendPort, cadence: 
 
   const byState: Record<ProjectState, ReviewProject[]> = { planned: [], active: [], paused: [], completed: [], canceled: [] };
   const allTasks: ReviewTask[] = [];
+  const held: ReviewInventory["held"] = [];
+  const discrepancies: ReviewInventory["discrepancies"] = [];
   let taskCount = 0;
   for (const snapshot of projects.value.items) {
     const state = snapshot.value.state;
@@ -107,7 +121,16 @@ export async function reviewInventory(knowledge: KnowledgeBackendPort, cadence: 
         const task = toTask(item);
         if (!task) { gaps.push(`tasks: ${item.ref.id} has no readable state.`); complete = false; continue; }
         taskCount++;
-        allTasks.push(task);
+        // Only an active parent makes a Task executable; others are held, and actual
+        // work found under them is kept as evidence for Review.
+        if (state === "active") allTasks.push(task);
+        else {
+          const open = task.state === "todo" || task.state === "doing" || task.state === "waiting";
+          if (open) held.push({ ...task, projectState: state });
+          if (task.state === "doing" || (state === "planned" && task.state === "done")) {
+            discrepancies.push({ ...task, projectState: state, reason: `${task.state === "doing" ? "Work in progress" : "Completed work"} recorded under a ${state} Project.` });
+          }
+        }
         if (task.state === "todo" || task.state === "doing") {
           entry.tasks.open++;
           if (task.time && task.time < today) entry.tasks.overdue++;
@@ -172,7 +195,7 @@ export async function reviewInventory(knowledge: KnowledgeBackendPort, cadence: 
   return {
     ok: true,
     value: {
-      cadence, today, horizon, captures, actions, projects: byState, areas: areaRows,
+      cadence, today, horizon, captures, actions, held, discrepancies, projects: byState, areas: areaRows,
       population: { areas: areas.value.items.length, projects: projects.value.items.length, tasks: taskCount, captures: captures.inbox.length, coverage: complete ? "complete" : "partial", gaps },
     },
     limits: ["Tasks of completed and canceled Projects were not read; Task bodies and Project KR evidence need the entity reads."],

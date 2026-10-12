@@ -891,6 +891,9 @@ function fakeCraft() {
   const live = await knowledge.projects.create({ title: "Live one", content: "", state: "active", primaryArea: areaRef }, { grant: projectGrant });
   await knowledge.tasks.create({ title: "Overdue step", content: "", state: "todo", time: "2026-10-01", project: live.value.created }, { grant: projectGrant });
   await knowledge.tasks.create({ title: "Soon step", content: "", state: "todo", time: "2026-10-14", project: live.value.created }, { grant: projectGrant });
+  // A planned Project's due Task is held, not executable; actual work under it is a discrepancy.
+  const heldDue = await knowledge.tasks.create({ title: "Due under planned", content: "", state: "todo", time: "2026-10-01", project: planned.value.created }, { grant: projectGrant });
+  const doneEarly = await knowledge.tasks.create({ title: "Done under planned", content: "", state: "done", project: planned.value.created }, { grant: projectGrant });
   const review = await operations.reviewInventory("weekly");
   assert.equal(review.ok, true, JSON.stringify(review));
   const inv = review.value;
@@ -901,6 +904,10 @@ function fakeCraft() {
   const liveEntry = inv.projects.active.find(p => p.title === "Live one");
   assert.deepEqual([liveEntry.signals, liveEntry.tasks.open, liveEntry.tasks.overdue, liveEntry.tasks.next], [["overdue"], 2, 1, "2026-10-01"]);
   assert.ok(inv.actions.overdue.some(t => t.title === "Overdue step" && t.project.id === live.value.created.id), "Project-owned overdue Tasks are listed with their Project");
+  const everyAction = Object.values(inv.actions).flat().map(t => t.ref.id);
+  assert.ok(!everyAction.includes(heldDue.value.created.id), "a due Task of a planned Project is not an executable candidate");
+  assert.deepEqual(inv.held.map(t => [t.ref.id, t.projectState]), [[heldDue.value.created.id, "planned"]], "it is listed as held under its planned Project");
+  assert.deepEqual(inv.discrepancies.map(t => t.ref.id), [doneEarly.value.created.id], "completed work under a planned Project is surfaced, not changed");
   assert.ok(inv.actions.waiting.some(t => t.ref.id === waiting.id), "standalone waiting follow-ups are listed");
   assert.ok(inv.actions.today.some(t => t.title === "Through operations"), "a Daily Note Task defaults to its day");
   assert.equal(inv.captures.inbox.length, 1);

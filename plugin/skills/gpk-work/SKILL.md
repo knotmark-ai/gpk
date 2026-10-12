@@ -60,14 +60,26 @@ treat Task completion as Project completion.
 
 ## Choose a next action
 
-When asked what to do next, `gpk_tasks_query` with `states` covering todo,
-doing and waiting and a time window around today with `includeUnset: true`;
-each item names its Project when it has one, and `gpk_projects_query` with
-`states: ["active"]` shows which Projects are committed. Offer a small choice
-from the current candidates, prefer Tasks of active Projects over standalone
-ones unless a date forces otherwise, and mention waiting follow-ups
-separately. Task blocks in documents outside GPK's locations are not listed.
-Do not assume device, location, energy or available time.
+When asked what to do next, `gpk_review_inventory` with `cadence: "daily"`
+gives the candidate set in one call. Its `actions` groups hold only executable
+Tasks: standalone ones and those of **active** Projects, with doing, overdue
+and undated work kept.
+
+- Tasks of planned, paused, completed or canceled Projects are never offered
+  as the next action, even when their date has arrived: a date does not
+  activate a Project. They appear under `held`; mention them only as a prompt
+  to review the Project.
+- `waiting` Tasks are not ready work. Offer them as follow-ups to check on,
+  separately from the choice.
+- `discrepancies` lists actual work recorded under a non-active Project. Keep
+  it as it is, point it out, and leave activation or closure to the user.
+- An inactive Area does not change its Projects' states; judge each Task by
+  its own Project.
+
+Offer a small choice (two or three) from the executable candidates, using Plan
+order within a Project and planned dates. Do not assume device, location,
+energy or available time; ask only if a missing constraint really changes the
+choice. Task blocks in documents outside GPK's locations are not listed.
 
 ## Close a Project
 

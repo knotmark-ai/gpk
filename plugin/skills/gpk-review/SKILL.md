@@ -33,7 +33,11 @@ Review record are not implemented; say so when asked.
 2. Daily: go through Inbox captures (clarify or leave them, via `gpk-work`),
    overdue and today's Tasks (do, reschedule with `gpk_tasks_schedule`, or
    drop with a reason), `doing` Tasks that stalled, and `waiting` follow-ups
-   whose condition may have resolved. Record results on the Task.
+   whose condition may have resolved. Record results on the Task. Tasks under
+   `held` belong to planned or paused Projects and are not due work; raise a
+   held Task only to ask whether its Project should be activated or resumed.
+   Report every entry in `discrepancies` (work recorded under a non-active
+   Project) without changing it.
 3. Weekly: for each active Project, `gpk_projects_read` and
    `gpk_tasks_query` with `project`; compare the KR evidence in the body with
    what actually happened, then decide: keep, reorder (`gpk_projects_order_tasks`),

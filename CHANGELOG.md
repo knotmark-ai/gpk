@@ -4,6 +4,10 @@ All notable changes to GPK will be documented here.
 
 ## Unreleased
 
+- Next-action and review candidates exclude Tasks of planned, paused,
+  completed or canceled Projects, even when due: the review inventory lists
+  them under `held`, and actual work recorded under a non-active Project under
+  `discrepancies`. The Work and Review Skills say so explicitly (A5, A9, W1).
 - Fix: pages with more than 50 top-level blocks were read only to the 50th,
   because Craft puts the child cursor beside `data`; every read now follows it.
 - Fix: documents in subfolders of Sources, Wikis and Outputs were not
