@@ -5,7 +5,8 @@ All notable changes to GPK will be documented here.
 ## Unreleased
 
 - Setup is a local web page. `gpk_setup_open` opens it from the runtime; the
-  user connects Craft, picks a dedicated or shared workspace, languages and
+  user connects a knowledge base (Craft today; Notion, Obsidian and Lark shown
+  as coming soon), picks a dedicated or shared workspace, languages and
   names, creates the structure and ticks permissions. The page writes only
   `settings.json` and `grants.json`. The tools that let the Agent authorize
   Craft, establish the layout, propose and write grants are removed, so grants

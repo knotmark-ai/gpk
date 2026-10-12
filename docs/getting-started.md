@@ -98,9 +98,10 @@ operation fails with a `next` step that names `gpk_setup_open`.
 Ask the Agent to set up GPK. It calls `gpk_setup_open`, which starts a page on
 `127.0.0.1` inside the runtime process and opens it in your browser:
 
-1. **Connect Craft.** Craft asks you to choose a workspace and approve "GPK",
-   then sends the browser back to the page. Craft lists GPK as its own
-   connection, separate from the host's Craft connector.
+1. **Connect a knowledge base.** Craft is available; Notion, Obsidian and Lark
+   are listed as coming soon and cannot be selected. Craft asks you to choose a
+   workspace and approve "GPK", then sends the browser back to the page. Craft
+   lists GPK as its own connection, separate from the host's Craft connector.
 2. **Workspace and languages.** Choose a dedicated workspace (everything at the
    top level, recommended) or a shared one (everything in one folder), the
    working language (conversation and record content), the metadata language

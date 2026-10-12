@@ -921,7 +921,10 @@ function fakeCraft() {
   assert.equal(state.ok, true, JSON.stringify(state));
   assert.equal(state.value.onboarding, "required");
   assert.equal(state.value.connection.tokens, "verified");
-  assert.equal((await api("/api/authorize", {})).json().value.state, "authorized");
+  assert.deepEqual(state.value.backends.filter(b => b.available).map(b => b.id), ["craft"], "only implemented knowledge bases are available");
+  assert.equal((await api("/api/authorize", { backend: "notion" })).json().error.code, "invalid", "a coming-soon knowledge base cannot be connected");
+  assert.equal((await api("/api/authorize", {})).json().error.code, "invalid", "the knowledge base must be named");
+  assert.equal((await api("/api/authorize", { backend: "craft" })).json().value.state, "authorized");
 
   const form = { workspace: "dedicated", workingLanguage: "zh-CN", metadataLanguage: "zh-CN", timezone: null, names: { host: "GPK", areas: "领域", projects: "项目", sources: "来源", wikis: "知识", outputs: "产出" } };
   assert.equal((await api("/api/establish", { ...form, names: { ...form.names, areas: " " } })).json().error.code, "invalid", "blank names are refused");

@@ -431,7 +431,9 @@ an extensibility rule, not a requirement to deliver every entrypoint at once.
 **Onboarding surface (decision of 2026-10-12).** Setup is a web page, not a
 conversation. `gpk_setup_open` starts a server on `127.0.0.1` inside the
 runtime process (`src/onboarding/`) and opens the page in the user's browser.
-The page connects Craft (the OAuth callback returns the browser to it), lets
+The page connects a knowledge base from a catalog (Craft is the only available
+adapter; the others are shown as coming soon and refused by the server; the
+OAuth callback returns the browser to the page), lets
 the user choose a dedicated or shared workspace, a working and a metadata
 language and the names, creates the structure, and writes the permissions the
 user ticks. Its only products are `settings.json` and `grants.json`.

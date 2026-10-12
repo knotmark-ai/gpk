@@ -33,6 +33,18 @@ export type OnboardingHandle = {
 type Json = Record<string, unknown>;
 const LANGUAGES = ["en", "zh-CN"] as const;
 
+/**
+ * Knowledge bases the page offers. Only implemented adapters are available; the
+ * others are listed so the page does not read as tied to one product, and the
+ * server refuses to connect them.
+ */
+export const KNOWLEDGE_BACKENDS: readonly { id: string; name: string; available: boolean }[] = [
+  { id: "craft", name: "Craft", available: true },
+  { id: "notion", name: "Notion", available: false },
+  { id: "obsidian", name: "Obsidian", available: false },
+  { id: "lark", name: "Lark", available: false },
+];
+
 function failure(code: "invalid" | "unavailable", message: string, next: string): Result<never> {
   return { ok: false, error: { code, message, affected: [], next } };
 }
@@ -92,7 +104,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingHandle {
   async function state(): Promise<Result<unknown>> {
     const inspection = await operations.setupInspect();
     if (!inspection.ok) return inspection;
-    const value: Json = { ...inspection.value };
+    const value: Json = { ...inspection.value, backends: KNOWLEDGE_BACKENDS };
     if (inspection.value.settings === "ready") {
       const proposal = await operations.setupProposeGrants();
       const grants = await operations.grantsList();
@@ -104,7 +116,12 @@ export function createOnboarding(options: OnboardingOptions): OnboardingHandle {
 
   async function route(method: string, path: string, body: Json): Promise<Result<unknown>> {
     if (method === "GET" && path === "/api/state") return state();
-    if (method === "POST" && path === "/api/authorize") return operations.connectionAuthorize(pageUrl());
+    if (method === "POST" && path === "/api/authorize") {
+      const backend = KNOWLEDGE_BACKENDS.find(entry => entry.id === body.backend);
+      if (!backend) return failure("invalid", "Unknown knowledge base.", "Choose one of the listed knowledge bases.");
+      if (!backend.available) return failure("invalid", `${backend.name} is not supported yet.`, "Choose an available knowledge base.");
+      return operations.connectionAuthorize(pageUrl());
+    }
     if (method === "POST" && path === "/api/establish") {
       const current = await operations.setupInspect();
       if (current.ok && current.value.settings === "ready" && current.value.layout?.locations.every(location => location.status === "ok")) {
