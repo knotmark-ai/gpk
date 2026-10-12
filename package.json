@@ -17,6 +17,7 @@
     "dist": "pnpm build:types && node scripts/package-release.mjs",
     "dist:previews": "pnpm build:types && node scripts/package-release.mjs --previews",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "gpk": "node scripts/dev.mjs",
     "test": "pnpm build && pnpm test:types && pnpm test:skills && pnpm test:platforms && pnpm test:hooks && pnpm test:runtime && pnpm test:package && pnpm test:release && pnpm test:publish",
     "test:types": "pnpm build:types && node tests/types/run-test.mjs",
     "test:skills": "node tests/skill-validation/run-test.mjs",

@@ -4,6 +4,9 @@ All notable changes to GPK will be documented here.
 
 ## Unreleased
 
+- Add `pnpm gpk`, developer commands for local runs: status, auth, setup,
+  call, raw Craft commands, reset (token revocation, secret and control-root
+  removal, optional Craft cleanup) and launching Claude Code with the package.
 - Default Setup layout is now the top level of a workspace dedicated to GPK;
   the `GPK` namespace folder is opt-in for shared workspaces.
 - Fix: the Craft connection no longer repeats a write after a 5xx or network

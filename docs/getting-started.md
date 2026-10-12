@@ -174,7 +174,30 @@ line under a Project's `Results & Review` through `gpk_projects_update`
 (an edit whose `after` adds a paragraph), Task changes through the Task
 tools, closure through `gpk_projects_transition`.
 
-## 9. Implement the next slice
+## 9. Developer commands
+
+`pnpm gpk <command>` wraps the steps above for local runs and debugging. Tool
+calls go through the built package's stdio runtime (run `pnpm build` after
+source changes); every command takes `--root <dir>` for another control root
+and `--yes` to skip confirmations.
+
+| Command | What it does |
+|---|---|
+| `pnpm gpk status` | Settings, Craft authorization, bound space, grant count and layout checks |
+| `pnpm gpk auth` | Starts authorization, opens the browser and waits for the approval |
+| `pnpm gpk setup [--shared] [--lang zh-CN]` | Inspects, establishes the layout and writes Settings and the default grants, confirming each step |
+| `pnpm gpk call <tool> [json]` | Calls any GPK MCP tool and prints the full `Result` |
+| `pnpm gpk craft read\|write "<cmd>"` | Sends a raw Craft command with this root's token; writes bypass grants |
+| `pnpm gpk reset [--craft]` | Revokes the refresh token, deletes it from the secret store and deletes the control root; `--craft` first deletes what Setup created in the space |
+| `pnpm gpk claude` | Builds the Claude Code package and starts `claude --plugin-dir` with it |
+
+On macOS the token lives in the keychain, not in the control root, so deleting
+the directory alone leaves a token that the next run of the same root picks
+up. Use `pnpm gpk reset` for a clean start. `reset --craft` finds structures
+through the current Settings; Tasks GPK created in Daily Notes are not removed,
+and deleted documents stay in Craft's trash until it is emptied.
+
+## 10. Implement the next slice
 
 The next slice is archive/restore/remove, personal templates and recurrence. Extend `src/adapters/craft.ts` (Tasks, captures, layout),
 `src/adapters/craft-collections.ts` (Areas, Projects, materials) and

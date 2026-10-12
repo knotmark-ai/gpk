@@ -31,16 +31,22 @@ function failure(code: Failure["code"], message: string, next: string): Result<n
   return { ok: false, error: { code, message, affected: [], next } };
 }
 
+/**
+ * The secret-store key used before Settings record one. It is derived from the control
+ * root so two roots on one machine (two spaces, or a test root) never share a token
+ * entry; the default root keeps the plain form. Settings then record the key Setup used.
+ */
+export function defaultCredentialsRef(backendId: string, controlRoot: string, home: string | undefined): string {
+  const suffix = controlRoot === resolveControlRoot({ HOME: home }) ? "" : `:${createHash("sha256").update(controlRoot).digest("hex").slice(0, 8)}`;
+  return `gpk:craft:${backendId}${suffix}`;
+}
+
 export function bootstrap(options: BootstrapOptions = {}) {
   const env = options.env ?? process.env;
   const controlRoot = resolveControlRoot(env);
   let secrets: SecretStore | null = options.secrets ?? null;
   const connections = new Map<string, { connection: CraftConnection; knowledge: CraftKnowledgeAdapter }>();
 
-  // Before Settings exist the secret key is derived from the control root, so two
-  // roots on one machine (two spaces, or a test root) never share one token entry.
-  // Settings record the key that Setup used; the default root keeps the plain form.
-  const rootSuffix = controlRoot === resolveControlRoot({ HOME: env.HOME }) ? "" : `:${createHash("sha256").update(controlRoot).digest("hex").slice(0, 8)}`;
   /** The active layout from current Settings, read on demand so Setup changes apply without restart. */
   async function currentLayout(): Promise<Result<KnowledgeLayout["locations"] | null>> {
     const settings = await control.settings.read();
@@ -50,7 +56,7 @@ export function bootstrap(options: BootstrapOptions = {}) {
     return configuration.ok ? { ok: true, value: configuration.value.layout.locations, limits: [] } : configuration;
   }
   function bind(backendId: string, endpoint: string, credentialsRef?: string): KnowledgeBinding {
-    const secretKey = credentialsRef ?? `gpk:craft:${backendId}${rootSuffix}`;
+    const secretKey = credentialsRef ?? defaultCredentialsRef(backendId, controlRoot, env.HOME);
     const key = `${backendId}|${endpoint}|${secretKey}`;
     let bound = connections.get(key);
     if (!bound) {
