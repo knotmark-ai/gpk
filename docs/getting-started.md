@@ -176,18 +176,15 @@ tools, closure through `gpk_projects_transition`.
 
 ## 9. Developer commands
 
-`pnpm gpk <command>` wraps the steps above for local runs and debugging. Tool
-calls go through the built package's stdio runtime (run `pnpm build` after
-source changes); every command takes `--root <dir>` for another control root
-and `--yes` to skip confirmations.
+`pnpm gpk <command>` covers what the product flow does not: inspecting a
+local run, resetting it and starting Claude Code with the current build.
+Authorization and Setup stay in the host through the `gpk-setup` Skill. Every
+command takes `--root <dir>` for another control root and `--yes` to skip
+confirmations.
 
 | Command | What it does |
 |---|---|
-| `pnpm gpk status` | Settings, Craft authorization, bound space, grant count and layout checks |
-| `pnpm gpk auth` | Starts authorization, opens the browser and waits for the approval |
-| `pnpm gpk setup [--shared] [--lang zh-CN]` | Inspects, establishes the layout and writes Settings and the default grants, confirming each step |
-| `pnpm gpk call <tool> [json]` | Calls any GPK MCP tool and prints the full `Result` |
-| `pnpm gpk craft read\|write "<cmd>"` | Sends a raw Craft command with this root's token; writes bypass grants |
+| `pnpm gpk status` | Settings, Craft authorization, bound space, grant count and layout checks, through the built runtime |
 | `pnpm gpk reset [--craft]` | Revokes the refresh token, deletes it from the secret store and deletes the control root; `--craft` first deletes what Setup created in the space |
 | `pnpm gpk claude` | Builds the Claude Code package and starts `claude --plugin-dir` with it |
 
