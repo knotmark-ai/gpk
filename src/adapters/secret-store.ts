@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { LockBusyError, withFileLock, writeFileAtomic } from "./file-lock.js";
 
 const run = promisify(execFile);
 
@@ -53,22 +54,34 @@ export function memorySecretStore(): SecretStore {
   };
 }
 
-/** Plain JSON file with mode 0600: the fallback where no keychain exists. Not a vault. */
+/**
+ * Plain JSON file with mode 0600: the fallback where no keychain exists. Not a vault.
+ * Every client on the machine shares it, so changes run under a lock file and replace
+ * the file atomically; a concurrent save of another key is kept, and an interrupted
+ * write never leaves partial JSON.
+ */
 export function fileSecretStore(file: string): SecretStore {
   async function load(): Promise<Record<string, string>> {
     try { return JSON.parse(await readFile(file, "utf8")) as Record<string, string>; }
     catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return {}; throw new Error("Secret file read failed."); }
   }
-  async function save(map: Record<string, string>): Promise<void> {
-    await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
-    await writeFile(file, JSON.stringify(map, null, 2) + "\n", { mode: 0o600 });
-    await chmod(file, 0o600);
+  async function change(apply: (map: Record<string, string>) => void): Promise<void> {
+    try {
+      await withFileLock(`${file}.lock`, async () => {
+        const map = await load();
+        apply(map);
+        await writeFileAtomic(file, JSON.stringify(map, null, 2) + "\n", 0o600);
+      });
+    } catch (error) {
+      if (error instanceof LockBusyError) throw new Error("Another GPK client is changing the secret file.");
+      throw error instanceof Error && error.message === "Secret file read failed." ? error : new Error("Secret file write failed.");
+    }
   }
   return {
     description: `file ${file} (mode 0600)`,
     async read(key) { return (await load())[key] ?? null; },
-    async write(key, value) { const map = await load(); map[key] = value; await save(map); },
-    async remove(key) { const map = await load(); delete map[key]; await save(map); },
+    async write(key, value) { await change(map => { map[key] = value; }); },
+    async remove(key) { await change(map => { delete map[key]; }); },
   };
 }
 

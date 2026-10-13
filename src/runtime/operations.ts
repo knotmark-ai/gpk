@@ -120,9 +120,16 @@ export function createOperations(options: OperationsOptions) {
     return grants.ok && grants.value.items.length > 0 ? "complete" : "required";
   }
 
+  /**
+   * Every knowledge read and write waits for onboarding: Settings and at least one
+   * persisted grant. Reads are gated too, so GPK never works from a half-finished
+   * Setup; the per-operation grant check still applies to writes.
+   */
   async function withBinding<T>(run: (bound: KnowledgeBinding) => Promise<Result<T>>): Promise<Result<T>> {
     const bound = await binding();
-    return bound.ok ? run(bound.value) : bound;
+    if (!bound.ok) return bound;
+    if (await onboardingState() === "required") return failure("unavailable", "GPK onboarding is not complete: no permissions have been granted yet.", "Call gpk_setup_open and let the user choose permissions on the onboarding page, then retry.");
+    return run(bound.value);
   }
 
   /** Grant for an operation on one layout location (a Collection or a folder). */
@@ -307,7 +314,8 @@ export function createOperations(options: OperationsOptions) {
     },
     grantsRevoke: (ref: Ref, expected?: Version) => control.grants.revoke(ref, expected === undefined ? {} : { expected }),
     settingsUpdate: (changes: SettingsChanges, expected?: Version) => control.settings.update(changes, expected === undefined ? {} : { expected }),
-    knowledgeCapabilities: () => withBinding(bound => bound.knowledge.capabilities()),
+    // The capability inventory reads no records, so it stays available during onboarding.
+    knowledgeCapabilities: async () => { const bound = await binding(); return bound.ok ? bound.value.knowledge.capabilities() : bound; },
     controlCapabilities: () => control.capabilities(),
     settingsRead: (readOptions: Parameters<UserControlPort["settings"]["read"]>[0]) => control.settings.read(readOptions),
     grantsList: () => control.grants.list(),

@@ -444,11 +444,22 @@ user ticks. Its only products are `settings.json` and `grants.json`.
   authority either.
 - **Onboarding gates everything.** Until Settings exist and at least one
   grant is persisted, runtime status reports `onboarding: required` and every
-  knowledge operation's failure names `gpk_setup_open`.
-- **Loopback hardening.** Any website can send requests to `127.0.0.1`, so each
-  page session has a random token (query for the page, header for the API),
-  the server checks Host against DNS rebinding and Origin for writes, accepts
-  only JSON bodies, and stops after 30 idle minutes or with the runtime.
+  knowledge operation, reads included, fails `unavailable` with a `next` step
+  naming `gpk_setup_open`. Only the capability inventory, which reads no
+  records, stays available.
+- **Loopback hardening.** Any website can send requests to `127.0.0.1`, so
+  the server checks Host against DNS rebinding, requires a session cookie on
+  every request, requires a same-origin `Origin` and `Sec-Fetch-Site` on writes,
+  accepts only JSON bodies, and stops after 30 idle minutes or with the runtime.
+- **The Agent holds no confirming credential.** `gpk_setup_open` mints a
+  one-time launch token and gives the URL to the browser; the first load trades
+  it for an HttpOnly, SameSite=Lax session cookie and the URL stops working.
+  The tool result carries the URL only when no browser could be opened. If an
+  Agent spends that URL, the user's link shows as expired, so misuse is
+  visible. Residual risk, accepted: a process running with the user's local
+  privileges can forge browser headers or edit `grants.json` directly, so no
+  loopback design proves that a human clicked. The boundary is that GPK never
+  hands the Agent a credential or a tool that confirms.
 - **Remote deployment.** The page's handlers call `Operations` only, so a
   remote GPK serves the same page behind an authenticated session instead of a
   loopback token; the OAuth callback then moves to the service's public URL.

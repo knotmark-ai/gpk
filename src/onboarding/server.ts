@@ -12,9 +12,16 @@ import page from "./page.html";
  * by the user's own clicks; the Agent opens the page but cannot confirm it.
  *
  * Any web page in the user's browser can send requests to 127.0.0.1, so every request
- * must carry the per-session token (query for the page, header for the API), name
- * this server in Host (against DNS rebinding) and, for writes, come from this origin
- * with a JSON body (so no cross-site form can trigger one).
+ * must name this server in Host (against DNS rebinding) and carry the session cookie;
+ * writes must also come from this origin (Origin and Sec-Fetch-Site) with a JSON body.
+ *
+ * The Agent must not hold a credential that confirms the page. `open()` mints a
+ * one-time launch token and hands the URL to the browser; the first page load trades
+ * it for an HttpOnly session cookie, so the URL is dead once used. The URL reaches the
+ * Agent only when no browser could be opened, and then an Agent that spends it leaves
+ * the user's link visibly expired. This keeps the credential out of tool output; it
+ * cannot prove a human clicked, since a process with the user's local shell can do
+ * anything the user can, including editing grants.json directly.
  */
 export type OnboardingOptions = {
   operations: Operations;
@@ -25,13 +32,14 @@ export type OnboardingOptions = {
 };
 
 export type OnboardingHandle = {
-  /** Start (or reuse) the server and open the page; returns its URL. */
-  open(): Promise<Result<{ url: string; opened: boolean }>>;
+  /** Start (or reuse) the server and open the page; the URL is returned only when no browser opened. */
+  open(): Promise<Result<{ opened: boolean; url?: string }>>;
   close(): Promise<void>;
 };
 
 type Json = Record<string, unknown>;
 const LANGUAGES = ["en", "zh-CN"] as const;
+const SESSION_COOKIE = "gpk_session";
 
 /**
  * Knowledge bases the page offers. Only implemented adapters are available; the
@@ -49,8 +57,8 @@ function failure(code: "invalid" | "unavailable", message: string, next: string)
   return { ok: false, error: { code, message, affected: [], next } };
 }
 
-function sameToken(given: string | undefined | null, token: string): boolean {
-  if (!given) return false;
+function sameToken(given: string | undefined | null, token: string | null): boolean {
+  if (!given || !token) return false;
   const a = Buffer.from(given);
   const b = Buffer.from(token);
   return a.length === b.length && timingSafeEqual(a, b);
@@ -91,10 +99,16 @@ export function createOnboarding(options: OnboardingOptions): OnboardingHandle {
   const idleMs = options.idleMs ?? 30 * 60 * 1000;
   let server: http.Server | null = null;
   let origin = "";
-  let token = "";
+  /** One-time token in the URL handed to the browser; null once spent. */
+  let launch: string | null = null;
+  /** Session cookies issued by spending a launch token. */
+  const sessions = new Set<string>();
   let idle: NodeJS.Timeout | null = null;
 
-  const pageUrl = () => `${origin}/?t=${token}`;
+  const hasSession = (request: http.IncomingMessage) => {
+    const value = (request.headers.cookie ?? "").split(/;\s*/).find(part => part.startsWith(`${SESSION_COOKIE}=`))?.slice(SESSION_COOKIE.length + 1);
+    return [...sessions].some(session => sameToken(value, session));
+  };
   function touch(): void {
     if (idle) clearTimeout(idle);
     idle = setTimeout(() => { void handle.close(); }, idleMs);
@@ -120,7 +134,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingHandle {
       const backend = KNOWLEDGE_BACKENDS.find(entry => entry.id === body.backend);
       if (!backend) return failure("invalid", "Unknown knowledge base.", "Choose one of the listed knowledge bases.");
       if (!backend.available) return failure("invalid", `${backend.name} is not supported yet.`, "Choose an available knowledge base.");
-      return operations.connectionAuthorize(pageUrl());
+      // Craft redirects the browser back here; the session cookie (SameSite=Lax) rides along.
+      return operations.connectionAuthorize(`${origin}/`);
     }
     if (method === "POST" && path === "/api/establish") {
       const current = await operations.setupInspect();
@@ -156,16 +171,31 @@ export function createOnboarding(options: OnboardingOptions): OnboardingHandle {
     if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) return reply(403, { error: "host" });
     const url = new URL(request.url ?? "/", origin);
     if (request.method === "GET" && url.pathname === "/") {
-      if (!sameToken(url.searchParams.get("t"), token)) return reply(403, "This onboarding link has expired. Ask the Agent to open GPK setup again.", "text/plain; charset=utf-8");
+      const given = url.searchParams.get("t");
+      if (given !== null) {
+        if (!sameToken(given, launch)) return reply(403, "This onboarding link was already used or has expired. Ask the Agent to open GPK setup again.", "text/plain; charset=utf-8");
+        // Spend the launch token: the URL stops working and the browser keeps a cookie.
+        launch = null;
+        const session = randomBytes(24).toString("base64url");
+        sessions.add(session);
+        touch();
+        response.writeHead(303, { location: "/", "set-cookie": `${SESSION_COOKIE}=${session}; HttpOnly; SameSite=Lax; Path=/`, "cache-control": "no-store", "referrer-policy": "no-referrer" });
+        return void response.end();
+      }
+      if (!hasSession(request)) return reply(403, "This onboarding link was already used or has expired. Ask the Agent to open GPK setup again.", "text/plain; charset=utf-8");
       touch();
       return reply(200, page, "text/html; charset=utf-8");
     }
     if (!url.pathname.startsWith("/api/")) return reply(404, { error: "not found" });
-    if (!sameToken(request.headers["x-gpk-token"] as string | undefined, token)) return reply(403, { error: "token" });
-    const requestOrigin = request.headers.origin;
-    if (requestOrigin !== undefined && requestOrigin !== origin && requestOrigin !== origin.replace("127.0.0.1", "localhost")) return reply(403, { error: "origin" });
+    if (!hasSession(request)) return reply(403, { error: "session" });
+    const fetchSite = request.headers["sec-fetch-site"];
+    if (fetchSite !== undefined && fetchSite !== "same-origin") return reply(403, { error: "site" });
     let body: Json = {};
     if (request.method === "POST") {
+      // Writes need the markers a browser adds to a same-origin fetch; their absence is refused.
+      const requestOrigin = request.headers.origin;
+      if (requestOrigin !== origin && requestOrigin !== origin.replace("127.0.0.1", "localhost")) return reply(403, { error: "origin" });
+      if (fetchSite !== "same-origin") return reply(403, { error: "site" });
       if (!(request.headers["content-type"] ?? "").startsWith("application/json")) return reply(415, { error: "json only" });
       let raw = "";
       for await (const chunk of request) { raw += chunk; if (raw.length > 64 * 1024) return reply(413, { error: "too large" }); }
@@ -179,7 +209,6 @@ export function createOnboarding(options: OnboardingOptions): OnboardingHandle {
   const handle: OnboardingHandle = {
     async open() {
       if (!server) {
-        token = randomBytes(24).toString("base64url");
         const next = http.createServer((request, response) => { void serve(request, response); });
         const started = await new Promise<boolean>(resolve => {
           next.once("error", () => resolve(false));
@@ -191,13 +220,18 @@ export function createOnboarding(options: OnboardingOptions): OnboardingHandle {
         origin = `http://127.0.0.1:${(next.address() as AddressInfo).port}`;
       }
       touch();
-      const url = pageUrl();
+      // Each open mints a new launch token; a session already in a browser keeps working.
+      launch = randomBytes(24).toString("base64url");
+      const url = `${origin}/?t=${launch}`;
       const opened = await options.openBrowser(url).catch(() => false);
-      return { ok: true, value: { url, opened }, limits: opened ? [] : ["The browser could not be opened; show the URL to the user."] };
+      if (opened) return { ok: true, value: { opened }, limits: [] };
+      return { ok: true, value: { opened, url }, limits: ["The browser could not be opened; show the URL to the user. It works once."] };
     },
     async close() {
       if (idle) clearTimeout(idle);
       idle = null;
+      launch = null;
+      sessions.clear();
       const current = server;
       server = null;
       if (current) await new Promise<void>(resolve => current.close(() => resolve()));

@@ -21,8 +21,10 @@ is wrong, and do not open the page over it.
 
 ## 2. Open the onboarding page
 
-Call `gpk_setup_open`. It opens the page in the user's browser and returns its
-URL. If `opened` is false, show the URL and ask the user to open it. Tell the
+Call `gpk_setup_open`. It opens the page in the user's browser. If `opened` is
+false, it returns a one-time URL: show it and ask the user to open it. Never
+fetch, open or submit the page yourself; the confirmations on it are the
+user's. Tell the
 user in one or two sentences what the page asks for:
 
 - connect a knowledge base (Craft today; others are listed as coming soon)

@@ -4,6 +4,24 @@ All notable changes to GPK will be documented here.
 
 ## Unreleased
 
+- Second review round:
+  - The onboarding page no longer gives the Agent a credential that can
+    confirm it. `gpk_setup_open` mints a one-time launch URL for the browser;
+    the first load trades it for an HttpOnly session cookie, and the URL then
+    stops working. The tool returns the URL only when no browser opened. Every
+    write needs the session cookie plus a same-origin `Origin` and
+    `Sec-Fetch-Site`. The architecture records the remaining local-process
+    risk.
+  - The review inventory is complete only when every page reports `complete`
+    and every record was read completely. `unknown` coverage, including on the
+    Inbox, is reported as a gap.
+  - The file secret store (the default outside macOS) changes its file under a
+    lock and replaces it atomically, so concurrent saves of different keys are
+    all kept. The lock and atomic write are shared with the control store
+    (`src/adapters/file-lock.ts`).
+  - Every knowledge operation, reads included, waits for onboarding (Settings
+    plus at least one grant), as the architecture states. The capability
+    inventory stays available.
 - Review fixes (PR #2):
   - Writes no longer trust a cached Task container or Collection membership:
     before authorizing, the adapter re-checks that the Projects Collection is

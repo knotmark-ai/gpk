@@ -118,7 +118,6 @@ button.primary:disabled { opacity: .55; cursor: progress; }
 <main id="app" aria-live="polite"></main>
 <script>
 "use strict";
-const TOKEN = new URLSearchParams(location.search).get("t") || "";
 
 const TEXT = {
   en: {
@@ -239,7 +238,7 @@ function h(tag, props, ...children) {
 
 async function api(method, path, body) {
   try {
-    const response = await fetch(path, { method, headers: { "x-gpk-token": TOKEN, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
+    const response = await fetch(path, { method, credentials: "same-origin", headers: body ? { "content-type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
     if (!response.ok) return { ok: false, error: { message: `HTTP ${response.status}.`, next: t("retry") } };
     return await response.json();
   } catch {

@@ -22,10 +22,12 @@ const probe = buildSync({
     'export { createCraftConnection } from "./src/adapters/craft-connection.ts";',
     'export { createOperations } from "./src/runtime/operations.ts";',
     'export { bootstrap } from "./src/runtime/bootstrap.ts";',
+    'export { createOnboarding } from "./src/onboarding/server.ts";',
+    'export { reviewInventory } from "./src/runtime/review.ts";',
   ].join("\n"), resolveDir: repo, loader: "ts" },
   bundle: true, platform: "node", format: "esm", write: false, loader: { ".md": "text", ".html": "text" },
 });
-const { createCraftAdapter, parseTaskListing, parseActionLine, createLocalControlAdapter, resolveControlRoot, memorySecretStore, fileSecretStore, createCraftConnection, createOperations, bootstrap } =
+const { createCraftAdapter, parseTaskListing, parseActionLine, createLocalControlAdapter, resolveControlRoot, memorySecretStore, fileSecretStore, createCraftConnection, createOperations, bootstrap, createOnboarding, reviewInventory } =
   await import(`data:text/javascript;base64,${Buffer.from(probe.outputFiles[0].contents).toString("base64")}`);
 
 const SPACE = { id: "space-1", name: "Test Space", timezone: "Asia/Shanghai" };
@@ -1014,6 +1016,14 @@ function fakeCraft() {
   const viaOps = await operations.tasksCreate({ title: "Through operations", content: "", state: "todo" });
   assert.equal(viaOps.ok, true, JSON.stringify(viaOps));
   fs.writeFileSync(path.join(root, "grants.json"), JSON.stringify({ schemaVersion: 1, grants: [] }));
+  // Onboarding gates every knowledge operation, reads included, until a grant exists.
+  for (const gated of [operations.tasksCreate({ title: "No grant", content: "", state: "todo" }), operations.projectsQuery({}), operations.tasksRead(viaOps.value.created), operations.reviewInventory("weekly")]) {
+    const result = await gated;
+    assert.equal(result.error?.code, "unavailable", JSON.stringify(result));
+    assert.match(result.error.next, /gpk_setup_open/);
+  }
+  assert.equal((await operations.knowledgeCapabilities()).ok, true, "the capability inventory stays available during onboarding");
+  fs.writeFileSync(path.join(root, "grants.json"), JSON.stringify({ schemaVersion: 1, grants: [{ ...grants.grants[0], id: "elsewhere", root: { scope: SPACE.id, id: "inbox" } }] }));
   assert.equal((await operations.tasksCreate({ title: "No grant", content: "", state: "todo" })).error.code, "unauthorized");
   assert.equal((await operations.tasksTransition(viaOps.value.created, "done", "x")).error.code, "unauthorized");
   fs.writeFileSync(path.join(root, "grants.json"), JSON.stringify(grants));
@@ -1048,6 +1058,29 @@ function fakeCraft() {
   assert.equal(inv.population.projects, 5);
   assert.equal((await operations.reviewInventory("daily", 400)).error.code, "invalid");
   console.log("PASS: the review inventory reads captures, actions, Projects with signals and Areas in one call with coverage");
+
+  // Review coverage: completeness is never inferred from the absence of a next page.
+  {
+    const page = (items, coverage) => async () => ({ ok: true, value: { items, coverage }, limits: [] });
+    const port = coverage => ({
+      areas: { query: page([], coverage) },
+      projects: { query: page([], coverage) },
+      tasks: { query: page([], coverage) },
+      captures: { resolve: async () => ({ ok: true, value: { scope: SPACE.id, id: "inbox", role: "capture-surface" }, limits: [] }), list: page([], coverage) },
+    });
+    const unknown = await reviewInventory(port("unknown"), "weekly", "2026-10-13");
+    assert.equal(unknown.value.population.coverage, "partial", "unknown coverage is not complete");
+    assert.ok(["areas", "projects", "standalone tasks", "captures"].every(label => unknown.value.population.gaps.some(gap => gap.startsWith(`${label}:`))), JSON.stringify(unknown.value.population.gaps));
+    const complete = await reviewInventory(port("complete"), "weekly", "2026-10-13");
+    assert.deepEqual([complete.value.population.coverage, complete.value.population.gaps], ["complete", []]);
+    const inboxOnly = { ...port("complete"), captures: { ...port("complete").captures, list: page([], "unknown") } };
+    assert.equal((await reviewInventory(inboxOnly, "weekly", "2026-10-13")).value.population.coverage, "partial", "an Inbox of unknown coverage is a gap");
+    const partialRecord = { ...port("complete"), areas: { query: page([{ ref: { kind: "Area", scope: SPACE.id, id: "area-1" }, value: { title: "Half read", state: "active" }, coverage: "partial" }], "complete") } };
+    const recordGap = await reviewInventory(partialRecord, "weekly", "2026-10-13");
+    assert.equal(recordGap.value.population.coverage, "partial", "a record read partially is a gap even on a complete page");
+    assert.ok(recordGap.value.population.gaps.some(gap => gap.includes("area-1")));
+  }
+  console.log("PASS: the review inventory treats unknown or partial page and record coverage as gaps");
 
   const status = await operations.runtimeStatus();
   assert.equal(status.value.settings, "ready");
@@ -1143,6 +1176,17 @@ function fakeCraft() {
   await secretFile.write("k", "v");
   assert.equal(await secretFile.read("k"), "v");
   assert.equal(fs.statSync(path.join(temporary, "secrets", "secrets.json")).mode & 0o777, 0o600);
+  // Two clients saving different keys at once keep both; no temp or lock files remain.
+  const sharedSecrets = path.join(temporary, "shared-secrets", "secrets.json");
+  const firstStore = fileSecretStore(sharedSecrets);
+  const secondStore = fileSecretStore(sharedSecrets);
+  await Promise.all(Array.from({ length: 6 }, (_, i) => (i % 2 ? firstStore : secondStore).write(`fixture-key-${i}`, `fixture-value-${i}`)));
+  assert.deepEqual(Object.keys(JSON.parse(fs.readFileSync(sharedSecrets, "utf8"))).sort(), Array.from({ length: 6 }, (_, i) => `fixture-key-${i}`), "concurrent saves of different keys are all kept");
+  await Promise.all([firstStore.remove("fixture-key-0"), secondStore.write("fixture-key-6", "fixture-value-6")]);
+  const afterMixed = JSON.parse(fs.readFileSync(sharedSecrets, "utf8"));
+  assert.deepEqual([afterMixed["fixture-key-0"], afterMixed["fixture-key-6"]], [undefined, "fixture-value-6"], "a concurrent remove and write both land");
+  assert.deepEqual(fs.readdirSync(path.dirname(sharedSecrets)), ["secrets.json"], "no temporary or lock file is left behind");
+  assert.equal(fs.statSync(sharedSecrets).mode & 0o777, 0o600);
   console.log("PASS: bootstrap binds Craft from Settings and keeps secrets out of the control files");
 }
 
@@ -1160,33 +1204,64 @@ function fakeCraft() {
   assert.match(blocked.error.next, /gpk_setup_open/, "knowledge work points at the onboarding page");
   const open = await booted.onboarding.open();
   assert.equal(open.ok, true, JSON.stringify(open));
-  assert.deepEqual(opened, [open.value.url], "the page is opened in the browser");
-  const page = new URL(open.value.url);
+  assert.equal(opened.length, 1, "the page is opened in the browser");
+  assert.deepEqual(open.value, { opened: true }, "the Agent does not receive the page URL when the browser opened it");
+  const page = new URL(opened[0]);
   assert.equal(page.hostname, "127.0.0.1");
-  const token = page.searchParams.get("t");
-  assert.ok(token && token.length >= 32, "the page carries a long random token");
+  const launch = page.searchParams.get("t");
+  assert.ok(launch && launch.length >= 32, "the page URL carries a long one-time launch token");
   const request = (pathname, { method = "GET", headers = {}, body } = {}) => new Promise((resolve, reject) => {
     const req = http.request({ host: "127.0.0.1", port: page.port, path: pathname, method, headers: { host: `127.0.0.1:${page.port}`, ...headers } }, res => {
-      let text = ""; res.on("data", chunk => { text += chunk; }); res.on("end", () => resolve({ status: res.statusCode, text, json: () => JSON.parse(text) }));
+      let text = ""; res.on("data", chunk => { text += chunk; }); res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, text, json: () => JSON.parse(text) }));
     });
     req.on("error", reject);
     if (body !== undefined) req.write(typeof body === "string" ? body : JSON.stringify(body));
     req.end();
   });
-  const api = (pathname, body) => request(pathname, body === undefined
-    ? { headers: { "x-gpk-token": token } }
-    : { method: "POST", headers: { "x-gpk-token": token, "content-type": "application/json", origin: page.origin }, body });
 
-  // Requests from anywhere but this page are refused.
-  assert.equal((await request("/")).status, 403, "the page needs its token");
-  assert.equal((await request(`/?t=${"x".repeat(token.length)}`)).status, 403);
-  const html = await request(`/?t=${token}`);
+  // The launch token is spent by the first load and traded for an HttpOnly cookie.
+  assert.equal((await request("/")).status, 403, "the page needs a launch token or session");
+  assert.equal((await request(`/?t=${"x".repeat(launch.length)}`)).status, 403);
+  assert.equal((await request(`/?t=${launch}`, { headers: { host: "evil.example:80" } })).status, 403, "a rebound Host is refused");
+  const launched = await request(`/?t=${launch}`);
+  assert.equal(launched.status, 303);
+  assert.equal(launched.headers.location, "/", "the token leaves the address bar");
+  const setCookie = launched.headers["set-cookie"][0];
+  assert.match(setCookie, /HttpOnly/);
+  assert.match(setCookie, /SameSite=Lax/);
+  const cookie = setCookie.split(";")[0];
+  assert.equal((await request(`/?t=${launch}`)).status, 403, "a launch URL works once");
+  const html = await request("/", { headers: { cookie } });
   assert.equal(html.status, 200);
   assert.ok(html.text.includes("GPK Setup"));
-  assert.equal((await request("/api/state")).status, 403, "the API needs the token header");
-  assert.equal((await request(`/?t=${token}`, { headers: { host: "evil.example:80" } })).status, 403, "a rebound Host is refused");
-  assert.equal((await request("/api/grants", { method: "POST", headers: { "x-gpk-token": token, "content-type": "text/plain" }, body: "{}" })).status, 415, "writes need a JSON body");
-  assert.equal((await request("/api/grants", { method: "POST", headers: { "x-gpk-token": token, "content-type": "application/json", origin: "https://evil.example" }, body: {} })).status, 403, "a foreign Origin is refused");
+  assert.ok(!html.text.includes("x-gpk-token"), "the page holds no bearer token");
+  const browser = { cookie, origin: page.origin, "sec-fetch-site": "same-origin" };
+  const api = (pathname, body) => request(pathname, body === undefined
+    ? { headers: { cookie, "sec-fetch-site": "same-origin" } }
+    : { method: "POST", headers: { ...browser, "content-type": "application/json" }, body });
+
+  // Requests without the browser session, or without same-origin markers on writes, are refused.
+  assert.equal((await request("/api/state")).status, 403, "the API needs the session cookie");
+  assert.equal((await request("/api/state", { headers: { "x-gpk-token": launch } })).status, 403, "the launch token is not an API credential");
+  assert.equal((await request("/api/state", { headers: { cookie, "sec-fetch-site": "cross-site" } })).status, 403, "a cross-site read is refused");
+  assert.equal((await request("/api/grants", { method: "POST", headers: { ...browser, "content-type": "text/plain" }, body: "{}" })).status, 415, "writes need a JSON body");
+  assert.equal((await request("/api/grants", { method: "POST", headers: { ...browser, "content-type": "application/json", origin: "https://evil.example" }, body: {} })).status, 403, "a foreign Origin is refused");
+  const { origin: _origin, ...noOrigin } = browser;
+  assert.equal((await request("/api/grants", { method: "POST", headers: { ...noOrigin, "content-type": "application/json" }, body: {} })).status, 403, "a write without Origin is refused");
+  const { "sec-fetch-site": _site, ...noSite } = browser;
+  assert.equal((await request("/api/grants", { method: "POST", headers: { ...noSite, "content-type": "application/json" }, body: {} })).status, 403, "a write without Sec-Fetch-Site is refused");
+
+  // Without a browser the URL is returned once for the user; opening again mints a new one.
+  const fallback = createOnboarding({ operations: booted.operations, openBrowser: async () => false });
+  const shown = await fallback.open();
+  assert.equal(shown.value.opened, false);
+  assert.match(shown.value.url, /\?t=/, "the URL is returned when no browser opened");
+  const again = await fallback.open();
+  assert.notEqual(again.value.url, shown.value.url, "each open mints a new launch token");
+  const fallbackPort = new URL(again.value.url).port;
+  const stale = await new Promise(resolve => http.get({ host: "127.0.0.1", port: fallbackPort, path: new URL(shown.value.url).pathname + new URL(shown.value.url).search, headers: { host: `127.0.0.1:${fallbackPort}` } }, res => { res.resume(); resolve(res.statusCode); }));
+  assert.equal(stale, 403, "an earlier, unspent launch URL is replaced");
+  await fallback.close();
 
   let state = (await api("/api/state")).json();
   assert.equal(state.ok, true, JSON.stringify(state));
@@ -1230,7 +1305,7 @@ function fakeCraft() {
   await booted.close();
   await assert.rejects(request("/api/state"), "the server stops with the runtime");
 }
-console.log("PASS: the onboarding page is the only Setup surface, guarded by token, Host, Origin and JSON checks, and writes only settings.json and grants.json");
+console.log("PASS: the onboarding page is the only Setup surface; a one-time launch URL becomes an HttpOnly session, the Agent gets no credential, and writes need same-origin browser markers");
 
 // ---------- Craft connection retry policy against a local MCP-over-HTTP endpoint ----------
 {

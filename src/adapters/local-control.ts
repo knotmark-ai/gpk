@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { mkdir, open, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
+import { LockBusyError, withFileLock, writeFileAtomic } from "./file-lock.js";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { Ref } from "../domain/entities.js";
@@ -143,51 +144,23 @@ function validateGrant(value: unknown): value is ControlGrant & { id: string } {
     typeof value.unattended === "boolean";
 }
 
-/** Write through a sibling temp file and rename, so readers never see a torn file. */
 async function writeJsonAtomic(file: string, value: unknown): Promise<Buffer> {
   const bytes = Buffer.from(JSON.stringify(value, null, 2) + "\n");
-  await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
-  const temporary = `${file}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`;
-  await writeFile(temporary, bytes, { mode: 0o644 });
-  await rename(temporary, file);
+  await writeFileAtomic(file, bytes);
   return bytes;
 }
 
 const LOCK_FILE = ".control.lock";
-/** A lock older than this is left by a crashed writer and may be broken. */
-const STALE_LOCK_MS = 30_000;
-const LOCK_WAIT_MS = 10_000;
 
-/**
- * Run one read/modify/write of the control files while holding an exclusive lock
- * file in the root. The atomic rename alone keeps readers from seeing a torn file
- * but lets two clients (Codex and Claude Code share the root) both write from a stale
- * snapshot, resurrecting a revoked grant or dropping a concurrent one. `open(..., "wx")`
- * is atomic across processes; a lock older than STALE_LOCK_MS is treated as abandoned.
- */
+/** Run one read/modify/write of the control files under the root's lock (see withFileLock). */
 async function withControlLock<T>(root: string, run: () => Promise<Result<T>>): Promise<Result<T>> {
-  const lock = path.join(root, LOCK_FILE);
-  try { await mkdir(root, { recursive: true, mode: 0o700 }); }
-  catch { return failure("unavailable", `Cannot create ${root}.`, "Check filesystem permissions for the control root."); }
-  const deadline = Date.now() + LOCK_WAIT_MS;
-  for (let attempt = 0; ; attempt++) {
-    try {
-      const handle = await open(lock, "wx");
-      await handle.writeFile(`${process.pid} ${new Date().toISOString()}\n`);
-      await handle.close();
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") return failure("unavailable", `Cannot lock ${root}.`, "Check filesystem permissions for the control root.");
-      try {
-        const held = await stat(lock);
-        if (Date.now() - held.mtimeMs > STALE_LOCK_MS) { await unlink(lock).catch(() => undefined); continue; }
-      } catch { continue; }
-      if (Date.now() > deadline) return failure("unavailable", "Another GPK client is changing the control files.", "Retry in a moment; if it persists, remove .control.lock from the control root.");
-      await new Promise(resolve => setTimeout(resolve, Math.min(200, 10 * 2 ** Math.min(attempt, 4)) + Math.random() * 20));
-    }
+  let ran = false;
+  try { return await withFileLock(path.join(root, LOCK_FILE), () => { ran = true; return run(); }); }
+  catch (error) {
+    if (ran) throw error;
+    if (error instanceof LockBusyError) return failure("unavailable", "Another GPK client is changing the control files.", "Retry in a moment; if it persists, remove .control.lock from the control root.");
+    return failure("unavailable", `Cannot lock ${root}.`, "Check filesystem permissions for the control root.");
   }
-  try { return await run(); }
-  finally { await unlink(lock).catch(() => undefined); }
 }
 
 /** Materialize declared defaults around the caller's actual backend selection. */

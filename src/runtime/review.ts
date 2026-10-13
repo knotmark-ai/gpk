@@ -1,6 +1,6 @@
-import type { AreaRef, ProjectRef, ProjectState, TaskRef, TaskState } from "../domain/entities.js";
+import type { AreaRef, ProjectRef, ProjectState, Ref, TaskRef, TaskState } from "../domain/entities.js";
 import type { CaptureRef, KnowledgeBackendPort } from "../domain/knowledge-backend-port.js";
-import type { Failure, Page, Result } from "../domain/operation-types.js";
+import type { Failure, Page, ReadCoverage, Result } from "../domain/operation-types.js";
 
 /**
  * The reviewed population for one sitting, read through the port in one call so
@@ -63,21 +63,34 @@ function addDays(date: string, days: number): string {
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
-/** Follow a paged query to the end, keeping the weakest coverage and every limit. */
-async function drain<T>(run: (cursor?: string) => Promise<Result<Page<T>>>, gaps: string[], label: string): Promise<Result<{ items: T[]; complete: boolean }>> {
+/**
+ * Follow a paged query to the end. The result is complete only when the last page
+ * says `complete` and every record on every page was read completely: `unknown` or
+ * `partial` without a further page is a gap, never inferred complete from the
+ * absence of `next`. Discovery coverage (pages) and content coverage (records) are
+ * checked separately, and every limit is kept.
+ */
+async function drain<T extends { ref: Ref; coverage?: ReadCoverage["coverage"] }>(run: (cursor?: string) => Promise<Result<Page<T>>>, gaps: string[], label: string): Promise<Result<{ items: T[]; complete: boolean }>> {
   const items: T[] = [];
   let cursor: string | undefined;
   let complete = true;
+  const note = (gap: string) => { if (!gaps.includes(gap)) gaps.push(gap); };
   for (let page = 0; page < 50; page++) {
     const result = await run(cursor);
     if (!result.ok) return result;
     items.push(...result.value.items);
-    for (const limit of result.limits) if (!gaps.includes(`${label}: ${limit}`)) gaps.push(`${label}: ${limit}`);
-    if (result.value.coverage === "partial" && !result.value.next) complete = false;
-    if (result.value.coverage === "complete" || !result.value.next) return { ok: true, value: { items, complete }, limits: [] };
+    for (const limit of result.limits) note(`${label}: ${limit}`);
+    for (const item of result.value.items) {
+      if (item.coverage !== undefined && item.coverage !== "complete") { complete = false; note(`${label}: ${item.ref.id} was read with ${item.coverage} coverage.`); }
+    }
+    if (result.value.coverage === "complete") return { ok: true, value: { items, complete }, limits: [] };
+    if (!result.value.next) {
+      note(`${label}: the backend reported ${result.value.coverage} coverage with no further page.`);
+      return { ok: true, value: { items, complete: false }, limits: [] };
+    }
     cursor = result.value.next;
   }
-  gaps.push(`${label}: stopped after 50 pages.`);
+  note(`${label}: stopped after 50 pages.`);
   return { ok: true, value: { items, complete: false }, limits: [] };
 }
 
@@ -176,11 +189,12 @@ export async function reviewInventory(knowledge: KnowledgeBackendPort, cadence: 
   const surface = await knowledge.captures.resolve({ name: "inbox" });
   if (!surface.ok) { gaps.push(`captures: ${surface.error.message}`); complete = false; }
   else {
-    const listed = await knowledge.captures.list(surface.value);
+    const inbox = surface.value;
+    const listed = await drain(cursor => knowledge.captures.list(inbox, cursor ? { cursor } : {}), gaps, "captures");
     if (!listed.ok) { gaps.push(`captures: ${listed.error.message}`); complete = false; }
     else {
       for (const item of listed.value.items) captures.inbox.push({ ref: item.ref, content: item.value.content });
-      if (listed.value.coverage === "partial") complete = false;
+      complete &&= listed.value.complete;
     }
   }
 

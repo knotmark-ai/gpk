@@ -105,7 +105,7 @@ export function createGpkServer(operations: Operations, version: string, onboard
   // Setup has one entry: the onboarding page. Connecting Craft, creating the layout and
   // granting permissions happen there by the user's own clicks; no tool writes them.
   server.registerTool("gpk_setup_open", {
-    description: "Open GPK's onboarding page in the user's browser (connect a knowledge base, create the workspace structure, choose permissions, set languages). Required before any other GPK work when runtime status reports onboarding: required, and to reconnect Craft. Returns the page URL; show it if the browser did not open, then wait for the user and check gpk_setup_inspect.",
+    description: "Open GPK's onboarding page in the user's browser (connect a knowledge base, create the workspace structure, choose permissions, set languages). Required before any other GPK work when runtime status reports onboarding: required, and to reconnect Craft. Returns opened: true when the browser opened the page, otherwise a one-time URL to show the user; then wait for the user and check gpk_setup_inspect. Never open or call the page yourself.",
     inputSchema: z.strictObject({}), annotations: { ...mutating, openWorldHint: true },
   }, async () => response(await onboarding.open()));
   server.registerTool("gpk_setup_inspect", {
