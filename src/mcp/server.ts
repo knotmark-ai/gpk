@@ -3,6 +3,7 @@ import * as z from "zod/v4";
 import type { Result } from "../domain/operation-types.js";
 import type { Operations } from "../runtime/operations.js";
 import type { OnboardingHandle } from "../onboarding/server.js";
+import { debug, debugEnabled, since } from "../runtime/debug-log.js";
 
 const readOptions = {
   cursor: z.string().optional(),
@@ -70,9 +71,37 @@ function response(result: Result<unknown>) {
   };
 }
 
+/**
+ * With the debug log on, record every tool call: its arguments (redacted, truncated),
+ * the duration and the result code. Registration is wrapped once so each tool below
+ * stays a plain registerTool call.
+ */
+function traceToolCalls(server: McpServer): void {
+  if (!debugEnabled()) return;
+  const register = server.registerTool.bind(server) as (...args: unknown[]) => unknown;
+  (server as unknown as { registerTool: (...args: unknown[]) => unknown }).registerTool = (name: unknown, config: unknown, handler: unknown) =>
+    register(name, config, async (...args: unknown[]) => {
+      const start = Date.now();
+      debug("tool", "call", { name, args: args[0] && typeof args[0] === "object" && !("signal" in (args[0] as object)) ? args[0] : {} });
+      try {
+        const result = await (handler as (...a: unknown[]) => Promise<{ structuredContent?: Result<unknown> }>)(...args);
+        const outcome = result.structuredContent;
+        debug("tool", "done", {
+          name, took: since(start),
+          ...(outcome?.ok ? { ok: true, limits: outcome.limits.length ? outcome.limits : undefined } : { ok: false, code: outcome?.error.code, message: outcome?.error.message, next: outcome?.error.next }),
+        });
+        return result;
+      } catch (error) {
+        debug("tool", "threw", { name, took: since(start), error: error instanceof Error ? error.message : String(error) });
+        throw error;
+      }
+    });
+}
+
 /** Transport-neutral registration seam; a later HTTP entrypoint can reuse it. */
 export function createGpkServer(operations: Operations, version: string, onboarding: OnboardingHandle) {
   const server = new McpServer({ name: "gpk", version });
+  traceToolCalls(server);
   const readOnly = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
   const mutating = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
   const destructive = { ...mutating, destructiveHint: true };

@@ -8,6 +8,7 @@ import type {
 import type { ControlGrant, CreateReceipt, Failure, GrantedWriteGuard, Result, Version, WriteReceipt } from "../domain/operation-types.js";
 import type { KnowledgeBackendConfiguration, KnowledgeLayout, SettingsChanges, UserControlPort } from "../domain/user-control-port.js";
 import { reviewInventory, todayIn, type ReviewCadence } from "./review.js";
+import { debug } from "./debug-log.js";
 
 /** The active knowledge binding, resolved by bootstrap from current Settings. */
 export type KnowledgeBinding = {
@@ -94,7 +95,11 @@ export function createOperations(options: OperationsOptions) {
     const match = grants.value.items.map(item => item.value).find(grant =>
       grant.backendId === backendId && grant.operations.includes(operation) &&
       grant.root.scope === scope && rootKeys.includes(grant.root.id));
-    if (!match) return failure("unauthorized", `No grant in ${controlRoot} covers ${operation} on ${rootKeys.join(" or ")}.`, "Call gpk_setup_open; the user grants operations on the onboarding page, then retry.");
+    if (!match) {
+      debug("grants", "denied", { operation, roots: rootKeys, grants: grants.value.items.length });
+      return failure("unauthorized", `No grant in ${controlRoot} covers ${operation} on ${rootKeys.join(" or ")}.`, "Call gpk_setup_open; the user grants operations on the onboarding page, then retry.");
+    }
+    debug("grants", "allowed", { operation, root: match.root.id });
     return { ok: true, value: match, limits: [] };
   }
 
@@ -128,7 +133,10 @@ export function createOperations(options: OperationsOptions) {
   async function withBinding<T>(run: (bound: KnowledgeBinding) => Promise<Result<T>>): Promise<Result<T>> {
     const bound = await binding();
     if (!bound.ok) return bound;
-    if (await onboardingState() === "required") return failure("unavailable", "GPK onboarding is not complete: no permissions have been granted yet.", "Call gpk_setup_open and let the user choose permissions on the onboarding page, then retry.");
+    if (await onboardingState() === "required") {
+      debug("operations", "onboarding-gate", { note: "knowledge operation refused until Settings and a grant exist" });
+      return failure("unavailable", "GPK onboarding is not complete: no permissions have been granted yet.", "Call gpk_setup_open and let the user choose permissions on the onboarding page, then retry.");
+    }
     return run(bound.value);
   }
 
@@ -222,6 +230,7 @@ export function createOperations(options: OperationsOptions) {
       // settings.json would otherwise let Craft structures be created that Settings can
       // never record. The diagnostic fallback of setupBinding does not authorize this path.
       const preflight = await control.settings.read();
+      debug("setup", "establish-start", { settings: !preflight.ok ? preflight.error.code : preflight.value === null ? "uninitialized" : "ready", plan });
       if (!preflight.ok) return { ok: false, error: { ...preflight.error, next: `Nothing was created in the knowledge base. ${preflight.error.next}` } };
       const bound = await setupBinding();
       if (!bound.ok) return bound;
@@ -231,6 +240,9 @@ export function createOperations(options: OperationsOptions) {
       const configured = preflight.value ? preflight.value.value.preferences.metadataLanguage : "en";
       const metadataLanguage = preferences?.metadataLanguage ?? (configured === "zh-CN" ? "zh-CN" : "en");
       const established = await bound.value.knowledge.layout.establish({ ...layoutPlan, metadataLanguage });
+      debug("setup", "layout", established.ok
+        ? { space: scoped.value.name, created: established.value.created.length, adopted: established.value.adopted.length, locations: established.value.locations, limits: established.limits }
+        : { code: established.error.code, message: established.error.message });
       if (!established.ok) return established;
       const current = await control.settings.read();
       // Control failed after Craft changed: report the created references so recovery adopts them.
@@ -257,6 +269,7 @@ export function createOperations(options: OperationsOptions) {
           settings = await control.settings.update(changes, { expected: current.value.version! });
         }
       }
+      debug("setup", "settings", settings.ok ? { written: current.value === null ? "initialized" : "updated", verified: settings.value.verified } : { code: settings.error.code, message: settings.error.message });
       if (!settings.ok) return { ok: false, error: { ...settings.error, code: "partial", affected: [...established.value.created, ...settings.error.affected], next: `Craft structures exist but Settings were not written: ${settings.error.next}` } };
       return { ok: true, value: { ...established.value, settings: settings.value }, limits };
     },
@@ -310,6 +323,7 @@ export function createOperations(options: OperationsOptions) {
         const written = await this.grantsGrant(missing);
         if (!written.ok) return written;
       }
+      debug("setup", "grants", { selected: chosen.map(grant => `${grant.root.id}:${grant.operations.length}`), written: missing.length, skipped: chosen.length - missing.length });
       return { ok: true, value: { written: missing.length, skipped: chosen.length - missing.length }, limits: [] };
     },
     grantsRevoke: (ref: Ref, expected?: Version) => control.grants.revoke(ref, expected === undefined ? {} : { expected }),

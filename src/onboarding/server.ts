@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import type { Result } from "../domain/operation-types.js";
 import type { GrantSelection, Operations, SetupPlan } from "../runtime/operations.js";
 import page from "./page.html";
+import { debug, since } from "../runtime/debug-log.js";
 
 /**
  * The onboarding page: GPK's Setup surface. It is served from the runtime process on
@@ -162,7 +163,13 @@ export function createOnboarding(options: OnboardingOptions): OnboardingHandle {
   }
 
   async function serve(request: http.IncomingMessage, response: http.ServerResponse): Promise<void> {
+    const start = Date.now();
     const reply = (status: number, payload: unknown, type = "application/json; charset=utf-8") => {
+      const outcome = payload && typeof payload === "object" && "ok" in payload ? payload as Result<unknown> : null;
+      debug("onboarding", "request", {
+        method: request.method, path: (request.url ?? "/").split("?")[0], status, took: since(start),
+        ...(outcome ? (outcome.ok ? { ok: true } : { ok: false, code: outcome.error.code, message: outcome.error.message }) : status >= 400 ? { refused: typeof payload === "string" ? "page" : payload } : {}),
+      });
       response.writeHead(status, { "content-type": type, "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "no-referrer" });
       response.end(typeof payload === "string" ? payload : JSON.stringify(payload));
     };
@@ -176,9 +183,11 @@ export function createOnboarding(options: OnboardingOptions): OnboardingHandle {
         if (!sameToken(given, launch)) return reply(403, "This onboarding link was already used or has expired. Ask the Agent to open GPK setup again.", "text/plain; charset=utf-8");
         // Spend the launch token: the URL stops working and the browser keeps a cookie.
         launch = null;
+        debug("onboarding", "launch-spent", { sessions: sessions.size + 1 });
         const session = randomBytes(24).toString("base64url");
         sessions.add(session);
         touch();
+        debug("onboarding", "request", { method: request.method, path: "/", status: 303, took: since(start), note: "launch token traded for a session cookie" });
         response.writeHead(303, { location: "/", "set-cookie": `${SESSION_COOKIE}=${session}; HttpOnly; SameSite=Lax; Path=/`, "cache-control": "no-store", "referrer-policy": "no-referrer" });
         return void response.end();
       }
@@ -200,6 +209,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingHandle {
       let raw = "";
       for await (const chunk of request) { raw += chunk; if (raw.length > 64 * 1024) return reply(413, { error: "too large" }); }
       try { body = raw ? JSON.parse(raw) as Json : {}; } catch { return reply(400, { error: "invalid json" }); }
+      debug("onboarding", "submit", { path: url.pathname, body });
     }
     touch();
     try { reply(200, await route(request.method ?? "GET", url.pathname, body)); }
@@ -218,16 +228,19 @@ export function createOnboarding(options: OnboardingOptions): OnboardingHandle {
         next.unref();
         server = next;
         origin = `http://127.0.0.1:${(next.address() as AddressInfo).port}`;
+        debug("onboarding", "server-start", { origin, idleMinutes: Math.round(idleMs / 60000) });
       }
       touch();
       // Each open mints a new launch token; a session already in a browser keeps working.
       launch = randomBytes(24).toString("base64url");
       const url = `${origin}/?t=${launch}`;
       const opened = await options.openBrowser(url).catch(() => false);
+      debug("onboarding", "open", { opened, sessions: sessions.size });
       if (opened) return { ok: true, value: { opened }, limits: [] };
       return { ok: true, value: { opened, url }, limits: ["The browser could not be opened; show the URL to the user. It works once."] };
     },
     async close() {
+      if (server) debug("onboarding", "server-stop");
       if (idle) clearTimeout(idle);
       idle = null;
       launch = null;

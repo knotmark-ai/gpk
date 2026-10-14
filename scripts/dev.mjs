@@ -24,7 +24,10 @@ const HELP = `GPK developer commands (pnpm gpk <command>)
   status                      Settings, Craft authorization, bound space, grants, layout
   reset [--craft]             Revoke and delete the token and delete the control root;
                               --craft first removes what Setup created in the space
-  claude                      Build the Claude Code package and start Claude with it
+  claude [--no-debug]         Build the Claude Code package and start Claude with it;
+                              the runtime writes a debug log unless --no-debug
+  logs [--clear]              Follow the runtime debug log (run in a second terminal);
+                              --clear empties it first
 
 Options for every command:
   --root <dir>                Control root (default: GPK_CONTROL_ROOT or ~/.gpk)
@@ -44,6 +47,7 @@ for (let i = 0; i < argv.length; i++) {
 const command = positional.shift() ?? "help";
 const controlRoot = path.resolve(flags.get("root") ?? process.env.GPK_CONTROL_ROOT ?? path.join(os.homedir(), ".gpk"));
 const assumeYes = flags.has("yes");
+const debugLog = process.env.GPK_DEBUG && !["0", "1", "true", "false"].includes(process.env.GPK_DEBUG) ? path.resolve(process.env.GPK_DEBUG) : path.join(controlRoot, "logs", "debug.log");
 
 // ---------- helpers ----------
 const line = (label, value) => console.log(`${label.padEnd(14)}${value}`);
@@ -240,12 +244,27 @@ function claude() {
   const build = spawnSync("pnpm", ["build:claude"], { cwd: repo, stdio: "inherit" });
   if (build.status !== 0) process.exit(build.status ?? 1);
   try { execFileSync("which", ["claude"], { stdio: "ignore" }); } catch { fail("the claude CLI is not on PATH."); }
-  const child = spawn("claude", ["--plugin-dir", pluginDir, ...positional], {
-    cwd: process.cwd(), stdio: "inherit", env: { ...process.env, GPK_CONTROL_ROOT: controlRoot },
-  });
+  const env = { ...process.env, GPK_CONTROL_ROOT: controlRoot };
+  if (flags.has("no-debug")) delete env.GPK_DEBUG;
+  else {
+    env.GPK_DEBUG ??= "1";
+    console.log(`GPK debug log: ${debugLog}\nFollow it in another terminal: pnpm gpk logs`);
+  }
+  const child = spawn("claude", ["--plugin-dir", pluginDir, ...positional], { cwd: process.cwd(), stdio: "inherit", env });
   child.on("exit", code => process.exit(code ?? 0));
 }
 
-const commands = { status, reset, claude, help: () => console.log(HELP) };
+/** Follow the debug log the runtime writes when GPK_DEBUG is set; waits for it to appear. */
+function logs() {
+  fs.mkdirSync(path.dirname(debugLog), { recursive: true, mode: 0o700 });
+  if (flags.has("clear")) fs.writeFileSync(debugLog, "", { mode: 0o600 });
+  else if (!fs.existsSync(debugLog)) fs.writeFileSync(debugLog, "", { mode: 0o600 });
+  console.log(`Following ${debugLog} (Ctrl-C to stop)`);
+  const child = spawn("tail", ["-n", "200", "-F", debugLog], { stdio: "inherit" });
+  process.once("SIGINT", () => child.kill("SIGINT"));
+  child.on("exit", code => process.exit(code ?? 0));
+}
+
+const commands = { status, reset, claude, logs, help: () => console.log(HELP) };
 if (!commands[command]) { console.error(`Unknown command: ${command}\n`); console.log(HELP); process.exit(1); }
 await commands[command]();

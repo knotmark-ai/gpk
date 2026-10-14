@@ -8,6 +8,7 @@ import type { KnowledgeBackendConfiguration, KnowledgeLayout, UserControlPort, U
 export type { KnowledgeConnection };
 import { createOperations, type KnowledgeBinding } from "./operations.js";
 import { createOnboarding } from "../onboarding/server.js";
+import { debug } from "./debug-log.js";
 import { spawn } from "node:child_process";
 
 /** Open a URL in the user's default browser; resolves false when no opener ran. */
@@ -80,6 +81,7 @@ export function bootstrap(options: BootstrapOptions = {}) {
     if (!bound) {
       secrets ??= defaultSecretStore(controlRoot);
       const connection = (options.createConnection ?? createCraftConnection)({ endpoint, secretKey, secrets });
+      debug("runtime", "bind", { backendId, endpoint, secretKey, secretStore: secrets.description });
       bound = { connection, knowledge: createCraftAdapter({ connection, backendId, layout: currentLayout }) };
       connections.set(key, bound);
     }

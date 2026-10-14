@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { LockBusyError, withFileLock, writeFileAtomic } from "./file-lock.js";
+import { debug, since } from "../runtime/debug-log.js";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { Ref } from "../domain/entities.js";
@@ -147,6 +148,7 @@ function validateGrant(value: unknown): value is ControlGrant & { id: string } {
 async function writeJsonAtomic(file: string, value: unknown): Promise<Buffer> {
   const bytes = Buffer.from(JSON.stringify(value, null, 2) + "\n");
   await writeFileAtomic(file, bytes);
+  debug("control", "write", { file: path.basename(file), bytes: bytes.length });
   return bytes;
 }
 
@@ -155,9 +157,11 @@ const LOCK_FILE = ".control.lock";
 /** Run one read/modify/write of the control files under the root's lock (see withFileLock). */
 async function withControlLock<T>(root: string, run: () => Promise<Result<T>>): Promise<Result<T>> {
   let ran = false;
-  try { return await withFileLock(path.join(root, LOCK_FILE), () => { ran = true; return run(); }); }
+  const start = Date.now();
+  try { return await withFileLock(path.join(root, LOCK_FILE), () => { ran = true; debug("control", "lock", { waited: since(start) }); return run(); }); }
   catch (error) {
     if (ran) throw error;
+    debug("control", "lock-failed", { waited: since(start), busy: error instanceof LockBusyError });
     if (error instanceof LockBusyError) return failure("unavailable", "Another GPK client is changing the control files.", "Retry in a moment; if it persists, remove .control.lock from the control root.");
     return failure("unavailable", `Cannot lock ${root}.`, "Check filesystem permissions for the control root.");
   }

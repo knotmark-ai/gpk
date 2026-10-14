@@ -190,7 +190,29 @@ confirmations.
 |---|---|
 | `pnpm gpk status` | Settings, Craft authorization, bound space, grant count and layout checks, through the built runtime |
 | `pnpm gpk reset [--craft]` | Revokes the refresh token, deletes it from the secret store and deletes the control root; `--craft` first deletes what Setup created in the space |
-| `pnpm gpk claude` | Builds the Claude Code package and starts `claude --plugin-dir` with it |
+| `pnpm gpk claude [--no-debug]` | Builds the Claude Code package and starts `claude --plugin-dir` with it; the runtime writes a debug log unless `--no-debug` |
+| `pnpm gpk logs [--clear]` | Follows the runtime debug log; run it in a second terminal. `--clear` empties the log first |
+
+**Debug log.** With `GPK_DEBUG=1` the runtime appends one line per event to
+`<control root>/logs/debug.log`; any other value of `GPK_DEBUG` is used as the
+log path. `pnpm gpk claude` sets `GPK_DEBUG=1`. Each line reads
+`<time> [<area>] <event> key=value …`. The areas are:
+
+| Area | What it logs |
+|---|---|
+| `runtime` | Start and shutdown, and each Craft binding |
+| `tool` | Every MCP call with its arguments, duration and result code |
+| `onboarding` | Server start, page open, each request with its status, launch-token exchange, form submissions |
+| `setup` | Preflight, layout creation (created and adopted structures), the Settings write, chosen grants |
+| `craft` | Every Craft command with its duration; rate-limit, server-error and reconnect retries; each OAuth step |
+| `grants` | Which grant allowed a write, or which operation and root were denied |
+| `operations` | Calls refused by the onboarding gate |
+| `control` | Lock waits and control file writes |
+
+Before a line is written, OAuth codes and tokens, the onboarding launch token and
+the session cookie are masked. Each value is cut at 300 characters, but record
+titles and the start of record bodies can still appear, so treat the log as
+private. `pnpm gpk reset` deletes the log along with the control root.
 
 On macOS the token lives in the keychain, not in the control root, so deleting
 the directory alone leaves a token that the next run of the same root picks

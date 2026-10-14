@@ -24,10 +24,11 @@ const probe = buildSync({
     'export { bootstrap } from "./src/runtime/bootstrap.ts";',
     'export { createOnboarding } from "./src/onboarding/server.ts";',
     'export { reviewInventory } from "./src/runtime/review.ts";',
+    'export { configureDebugLog, debug, redact } from "./src/runtime/debug-log.ts";',
   ].join("\n"), resolveDir: repo, loader: "ts" },
   bundle: true, platform: "node", format: "esm", write: false, loader: { ".md": "text", ".html": "text" },
 });
-const { createCraftAdapter, parseTaskListing, parseActionLine, createLocalControlAdapter, resolveControlRoot, memorySecretStore, fileSecretStore, createCraftConnection, createOperations, bootstrap, createOnboarding, reviewInventory } =
+const { createCraftAdapter, parseTaskListing, parseActionLine, createLocalControlAdapter, resolveControlRoot, memorySecretStore, fileSecretStore, createCraftConnection, createOperations, bootstrap, createOnboarding, reviewInventory, configureDebugLog, debug, redact } =
   await import(`data:text/javascript;base64,${Buffer.from(probe.outputFiles[0].contents).toString("base64")}`);
 
 const SPACE = { id: "space-1", name: "Test Space", timezone: "Asia/Shanghai" };
@@ -1307,6 +1308,38 @@ function fakeCraft() {
 }
 console.log("PASS: the onboarding page is the only Setup surface; a one-time launch URL becomes an HttpOnly session, the Agent gets no credential, and writes need same-origin browser markers");
 
+// ---------- Debug log: opt-in, redacted, covers the onboarding flow ----------
+{
+  assert.equal(configureDebugLog({}, temporary), null, "the debug log is off unless GPK_DEBUG is set");
+  assert.equal(redact("http://127.0.0.1:5/?t=abc123&x=1"), "http://127.0.0.1:5/?t=***&x=1");
+  assert.equal(redact("callback?code=SECRET&state=S2"), "callback?code=***&state=***");
+  assert.equal(redact('{"access_token":"A","refresh_token":"R","tokens":"verified"}'), '{"access_token":"***","refresh_token":"***","tokens":"verified"}');
+  assert.equal(redact("cookie: gpk_session=XYZ; other=1"), "cookie: gpk_session=***; other=1");
+  assert.equal(redact("Authorization: Bearer abc.def"), "Authorization: Bearer ***");
+  const logRoot = path.join(temporary, "debug-control");
+  const logFile = configureDebugLog({ GPK_DEBUG: "1" }, logRoot);
+  assert.equal(logFile, path.join(logRoot, "logs", "debug.log"));
+  try {
+    const http = await import("node:http");
+    const urls = [];
+    const traced = bootstrap({ env: { GPK_CONTROL_ROOT: logRoot, HOME: temporary }, secrets: memorySecretStore(), createConnection: () => fakeCraft().connection, openBrowser: async url => { urls.push(url); return true; } });
+    await traced.onboarding.open();
+    const launchUrl = new URL(urls[0]);
+    const cookie = await new Promise(resolve => http.get({ host: "127.0.0.1", port: launchUrl.port, path: launchUrl.pathname + launchUrl.search, headers: { host: launchUrl.host } }, res => { res.resume(); resolve(res.headers["set-cookie"][0].split(";")[0]); }));
+    debug("test", "long", { body: "x".repeat(1000) });
+    await traced.close();
+    const log = fs.readFileSync(logFile, "utf8");
+    for (const event of ["[onboarding] server-start", "[onboarding] open opened=true", "[onboarding] launch-spent", "status=303", "[onboarding] server-stop"]) assert.ok(log.includes(event), `missing ${event} in\n${log}`);
+    assert.ok(!log.includes(launchUrl.searchParams.get("t")), "the launch token never reaches the log");
+    assert.ok(!log.includes(cookie.split("=")[1]), "the session cookie never reaches the log");
+    assert.ok(log.split("\n").every(line => line.length < 1200), "values are truncated");
+    assert.equal(fs.statSync(logFile).mode & 0o777, 0o600);
+  } finally {
+    configureDebugLog({}, logRoot);
+  }
+}
+console.log("PASS: the debug log is opt-in, traces the onboarding flow and keeps tokens, cookies and long bodies out");
+
 // ---------- Craft connection retry policy against a local MCP-over-HTTP endpoint ----------
 {
   const http = await import("node:http");
@@ -1365,6 +1398,28 @@ const EXPECTED_TOOLS = [
   "gpk_links_query", "gpk_links_add", "gpk_links_remove", "gpk_checkpoints_read", "gpk_checkpoints_save", "gpk_review_inventory",
   "gpk_areas_query", "gpk_projects_query", "gpk_sources_query", "gpk_wikis_query", "gpk_outputs_query",
 ].sort();
+
+/** The installed runtime writes its debug trace only when GPK_DEBUG is set. */
+async function checkDebugLog(root, controlRoot) {
+  const logFile = path.join(temporary, "stdio-debug.log");
+  const transport = new StdioClientTransport({
+    command: process.execPath, args: [path.join(root, "mcp/stdio.mjs")], cwd: root, stderr: "pipe",
+    env: { GPK_CONTROL_ROOT: controlRoot, HOME: controlRoot, PATH: process.env.PATH, GPK_DEBUG: logFile },
+  });
+  const client = new Client({ name: "gpk-debug-check", version: "0" });
+  await client.connect(transport, { timeout: 15000 });
+  try {
+    await client.callTool({ name: "gpk_runtime_status", arguments: {} });
+    await client.callTool({ name: "gpk_tasks_query", arguments: { text: "dinner" } });
+  } finally {
+    await client.close();
+  }
+  const log = fs.readFileSync(logFile, "utf8");
+  assert.match(log, /\[runtime\] start pid=\d+/);
+  assert.match(log, /\[tool\] call name=gpk_runtime_status/);
+  assert.match(log, /\[tool\] call name=gpk_tasks_query args=\{"text":"dinner"\}/, "arguments are traced");
+  assert.match(log, /\[tool\] done name=gpk_tasks_query took=\d+ms ok=false code=unavailable/, "results are traced with their code");
+}
 
 async function checkStdio(root, config, negotiation, controlRoot) {
   assert.deepEqual(Object.keys(config.mcpServers), ["gpk"]);
@@ -1485,6 +1540,7 @@ try {
     const config = JSON.parse(fs.readFileSync(path.join(root, ".mcp.json"), "utf8"));
     await checkStdio(root, config, "legacy", emptyRoot);
     await checkStdio(root, config, { pin: "2026-07-28" }, emptyRoot);
+    if (target === "claude") await checkDebugLog(root, emptyRoot);
     await checkShutdown(path.join(root, "mcp/stdio.mjs"), undefined, emptyRoot);
     await checkShutdown(path.join(root, "mcp/stdio.mjs"), "SIGTERM", emptyRoot);
     assert.deepEqual(fs.readdirSync(root).sort(), before);

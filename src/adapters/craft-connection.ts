@@ -6,6 +6,7 @@ import {
 } from "@modelcontextprotocol/client";
 import type { Failure, Result } from "../domain/operation-types.js";
 import type { SecretStore } from "./secret-store.js";
+import { debug, since } from "../runtime/debug-log.js";
 
 /**
  * GPK's own authorized client to one Craft MCP endpoint.
@@ -118,10 +119,12 @@ export function createCraftConnection(options: CraftConnectionOptions): CraftCon
       return record?.tokens;
     },
     async saveTokens(tokens) {
+      debug("craft", "tokens-saved", { expiresIn: tokens.expires_in, refreshToken: Boolean(tokens.refresh_token) });
       (record ?? await load()).tokens = { ...tokens, obtainedAt: now() };
       await save();
     },
     async redirectToAuthorization(url) {
+      debug("craft", "oauth-redirect", { url: url.toString() });
       pending = { url: url.toString(), done: pending?.done ?? Promise.resolve() };
     },
     async saveCodeVerifier(verifier) { (record ?? await load()).verifier = verifier; await save(); },
@@ -172,6 +175,7 @@ export function createCraftConnection(options: CraftConnectionOptions): CraftCon
       const server = http.createServer((request, response) => {
         const url = new URL(request.url ?? "/", redirectUrl);
         if (url.pathname !== "/callback") { response.writeHead(404).end(); return; }
+        debug("craft", "oauth-callback", { error: url.searchParams.get("error") ?? undefined, returnTo });
         // Only a loopback page may be a return target, so the callback cannot redirect elsewhere.
         if (returnTo && /^http:\/\/(127\.0\.0\.1|localhost):\d+\//.test(returnTo)) response.writeHead(302, { location: returnTo }).end();
         else response.writeHead(200, { "content-type": "text/plain; charset=utf-8" }).end("GPK: authorization received. You can close this tab.");
@@ -180,7 +184,7 @@ export function createCraftConnection(options: CraftConnectionOptions): CraftCon
         else resolve(url.searchParams);
       });
       server.once("error", reject);
-      server.listen(port, "127.0.0.1");
+      server.listen(port, "127.0.0.1", () => debug("craft", "oauth-callback-listening", { port }));
       setTimeout(() => { server.close(); reject(new Error("authorization timed out")); }, 15 * 60 * 1000).unref();
     });
   }
@@ -189,6 +193,7 @@ export function createCraftConnection(options: CraftConnectionOptions): CraftCon
     let attempt = 0;
     let rateLimited = 0;
     let serverRetried = false;
+    const start = Date.now();
     for (;;) {
       attempt++;
       try {
@@ -198,11 +203,15 @@ export function createCraftConnection(options: CraftConnectionOptions): CraftCon
           ?.filter(item => item.type === "text").map(item => item.text ?? "").join("\n") ?? "";
         if (result.isError || /^(Failed|Error|Invalid)\b/.test(text)) {
           const code: Failure["code"] = /not found|no such|does not exist/i.test(text) ? "not-found" : "invalid";
+          debug("craft", tool === "craft_read" ? "read-failed" : "write-failed", { command, took: since(start), code, answer: text });
           return failure(code, text.slice(0, 500), "Correct the request against the current record; nothing is known to have changed.");
         }
+        debug("craft", tool === "craft_read" ? "read" : "write", { command, took: since(start), bytes: text.length, ...(attempt > 1 ? { attempt } : {}) });
         return { ok: true, value: text, limits: [] };
       } catch (error) {
+        const httpStatus = error instanceof SdkHttpError ? (error as { status?: number }).status : undefined;
         if (error instanceof SdkHttpError && (error as { status?: number }).status === 429 && rateLimited < RATE_LIMIT_DELAYS_MS.length) {
+          debug("craft", "rate-limited", { command, waitMs: RATE_LIMIT_DELAYS_MS[rateLimited] });
           await sleep(RATE_LIMIT_DELAYS_MS[rateLimited++]!);
           attempt--;
           continue;
@@ -210,6 +219,7 @@ export function createCraftConnection(options: CraftConnectionOptions): CraftCon
         // Craft answers an occasional 500; a read is safe to repeat once, a write is not.
         if (error instanceof SdkHttpError && ((error as { status?: number }).status ?? 0) >= 500 && tool === "craft_read" && !serverRetried) {
           serverRetried = true;
+          debug("craft", "server-error-retry", { command, status: httpStatus });
           await sleep(1000);
           attempt--;
           continue;
@@ -222,10 +232,12 @@ export function createCraftConnection(options: CraftConnectionOptions): CraftCon
         const status = error instanceof SdkHttpError ? (error as { status?: number }).status ?? 0 : 0;
         const notExecuted = error instanceof UnauthorizedError || status === 401 || status === 403 || status === 404;
         if (attempt === 1 && mapped.ok === false && mapped.error.code !== "invalid" && (tool === "craft_read" || notExecuted)) {
+          debug("craft", "reconnect-retry", { command, status: httpStatus, reason: mapped.error.message });
           await disconnect();
           record = null;
           continue;
         }
+        debug("craft", "call-failed", { tool, command, took: since(start), status: httpStatus, code: mapped.ok ? undefined : mapped.error.code, error: error instanceof Error ? error.message : String(error) });
         return mapped;
       }
     }
@@ -251,6 +263,7 @@ export function createCraftConnection(options: CraftConnectionOptions): CraftCon
       };
     },
     async authorize(returnTo) {
+      debug("craft", "authorize", { pending: Boolean(pending), returnTo });
       if (pending) return { ok: true, value: { state: "pending", authorizationUrl: pending.url }, limits: ["An authorization is already waiting for the browser callback."] };
       await load();
       try {
@@ -269,9 +282,11 @@ export function createCraftConnection(options: CraftConnectionOptions): CraftCon
             await waiting.close().catch(() => undefined);
             transport = null;
             await connect();
+            debug("craft", "oauth-complete");
           } catch (error) {
             // The browser flow fails out of band; keep the reason for the next status call.
             authorizationError = error instanceof Error ? error.message : String(error);
+            debug("craft", "oauth-failed", { error: authorizationError });
             throw error;
           } finally {
             pending = null;
@@ -295,6 +310,7 @@ export function createCraftConnection(options: CraftConnectionOptions): CraftCon
       try {
         const parsed = JSON.parse(result.value) as { space: CraftSpace };
         space = { id: parsed.space.id, name: parsed.space.name, timezone: parsed.space.timezone };
+        debug("craft", "space", { name: space.name, timezone: space.timezone });
         return { ok: true, value: space, limits: [] };
       } catch {
         return failure("unavailable", "connection info returned an unexpected payload.", "Retry; if it persists the connector surface changed.");

@@ -4,6 +4,11 @@ All notable changes to GPK will be documented here.
 
 ## Unreleased
 
+- Debug log for development runs. With `GPK_DEBUG` set, the runtime appends a
+  redacted line per event to `<control root>/logs/debug.log`: MCP tool calls,
+  onboarding requests, Setup steps, Craft commands and OAuth steps, grant
+  decisions and control-file locks. `pnpm gpk claude` turns it on, and
+  `pnpm gpk logs` follows it.
 - Second review round:
   - The onboarding page no longer gives the Agent a credential that can
     confirm it. `gpk_setup_open` mints a one-time launch URL for the browser;
