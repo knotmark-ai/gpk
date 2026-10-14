@@ -1,0 +1,60 @@
+{
+  "name": "gpk",
+  "version": "0.1.0",
+  "description": "Portable goal- and project-driven knowledge workflows: Skills plus a stdio MCP runtime that keeps Areas, Projects, Tasks, Sources, Wikis and Outputs in Craft.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "pnpm build:types && pnpm build:plugins",
+    "build:types": "node scripts/build-types.mjs",
+    "build:plugins": "node scripts/build-plugins.mjs",
+    "build:previews": "node scripts/build-plugins.mjs --previews",
+    "build:claude": "node scripts/build-plugins.mjs --target claude",
+    "build:codex": "node scripts/build-plugins.mjs --target codex",
+    "build:openclaw": "node scripts/build-plugins.mjs --target openclaw",
+    "build:workbuddy": "node scripts/build-plugins.mjs --target workbuddy",
+    "build:hermes": "node scripts/build-plugins.mjs --target hermes",
+    "dist": "pnpm build:types && node scripts/package-release.mjs",
+    "dist:previews": "pnpm build:types && node scripts/package-release.mjs --previews",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "gpk": "node scripts/dev.mjs",
+    "test": "pnpm build && pnpm test:types && pnpm test:skills && pnpm test:platforms && pnpm test:hooks && pnpm test:runtime && pnpm test:package && pnpm test:release && pnpm test:publish",
+    "test:types": "pnpm build:types && node tests/types/run-test.mjs",
+    "test:skills": "node tests/skill-validation/run-test.mjs",
+    "test:platforms": "node tests/platform-compat/run-test.mjs",
+    "test:hooks": "node tests/hooks/run-test.mjs",
+    "test:runtime": "node tests/runtime/run-test.mjs",
+    "test:package": "node tests/plugin-package/run-test.mjs",
+    "test:release": "node tests/release/run-test.mjs",
+    "test:publish": "node tests/publish/run-test.mjs",
+    "test:clients": "node scripts/validate-client-packages.mjs"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Knotmark AI",
+    "url": "https://github.com/knotmark-ai"
+  },
+  "homepage": "https://github.com/knotmark-ai/gpk",
+  "repository": "https://github.com/knotmark-ai/gpk",
+  "keywords": [
+    "goals",
+    "projects",
+    "knowledge-management",
+    "craft",
+    "agent-skill"
+  ],
+  "packageManager": "pnpm@11.20.0",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
+    "@modelcontextprotocol/server": "2.3.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "7.0.2",
+    "esbuild": "0.28.2"
+  }
+}

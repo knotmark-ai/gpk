@@ -1,0 +1,6 @@
+interface:
+  display_name: "GPK Plan"
+  short_description: "Frame a Project with Objective, KRs and Tasks"
+  default_prompt: "Use $gpk-plan to turn this goal into a Project with Tasks."
+policy:
+  allow_implicit_invocation: true

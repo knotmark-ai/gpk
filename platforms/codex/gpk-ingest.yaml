@@ -1,0 +1,6 @@
+interface:
+  display_name: "GPK Ingest"
+  short_description: "Register Sources and write Wikis and Outputs"
+  default_prompt: "Use $gpk-ingest to register this material as a Source."
+policy:
+  allow_implicit_invocation: true

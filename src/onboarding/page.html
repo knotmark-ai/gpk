@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
+<title>GPK Setup</title>
+<style>
+/* Design language: a library catalog card. The workspace plan on the right is the one
+   bold element (red top rule, ruled lines, serif entries); everything else stays quiet.
+   System fonts only: the page loads nothing from the network. */
+:root {
+  --paper: #edefe9; --sheet: #fafaf6; --ink: #1e2b2d; --graphite: #5d6968; --line: #d4d9d2;
+  --teal: #0e5a5e; --teal-soft: #dcebe9; --on-teal: #fafaf6; --rule: #b42e2e; --ok: #2f6b3f; --bad: #a3261f;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Songti SC", "Noto Serif CJK SC", serif;
+  --sans: "Avenir Next", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #172120; --sheet: #1f2b2a; --ink: #e4eae6; --graphite: #9aa8a5; --line: #34433f;
+    --teal: #5bb8b3; --teal-soft: #213a38; --on-teal: #10201f; --rule: #e06a5f; --ok: #7cc48f; --bad: #f08a80;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html { background: var(--paper); }
+body { margin: 0; color: var(--ink); font: 15px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
+main { max-width: 1040px; margin: 0 auto; padding: 48px 24px 72px; }
+
+header { margin-bottom: 32px; }
+h1 { font: 400 34px/1.15 var(--serif); letter-spacing: -0.01em; margin: 0; }
+.lede { color: var(--graphite); margin: 8px 0 0; max-width: 60ch; }
+
+ol.progress { list-style: none; display: flex; gap: 24px; padding: 0; margin: 28px 0 0; flex-wrap: wrap; }
+ol.progress li { display: flex; align-items: center; gap: 8px; color: var(--graphite); font-size: 14px; }
+ol.progress .n { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; font: 13px/1 var(--serif); }
+ol.progress li.current { color: var(--ink); }
+ol.progress li.current .n { border-color: var(--teal); color: var(--teal); }
+ol.progress li.past .n { background: var(--teal); border-color: var(--teal); color: var(--on-teal); }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 40px; align-items: start; }
+@media (max-width: 880px) { .layout { grid-template-columns: 1fr; } }
+
+.flow h2 { font: 400 24px/1.25 var(--serif); margin: 0 0 6px; }
+.flow > p.intro { color: var(--graphite); margin: 0 0 20px; max-width: 60ch; }
+.group { margin-top: 28px; }
+.group > h3 { font: 600 14px/1.4 var(--sans); margin: 0 0 4px; }
+.group > p { color: var(--graphite); font-size: 14px; margin: 0 0 12px; }
+
+.options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 520px) { .options { grid-template-columns: 1fr; } }
+.option { position: relative; text-align: left; background: var(--sheet); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; color: var(--ink); font: inherit; cursor: pointer; }
+.option:hover:not([aria-disabled="true"]) { border-color: var(--graphite); }
+.option[aria-pressed="true"] { border-color: var(--teal); box-shadow: inset 0 0 0 1px var(--teal); }
+.option[aria-disabled="true"] { cursor: not-allowed; color: var(--graphite); background: transparent; border-style: dashed; }
+.option strong { display: block; font: 500 17px/1.3 var(--serif); }
+.option span { display: block; font-size: 13px; color: var(--graphite); margin-top: 2px; }
+.option .tag { position: absolute; top: 12px; right: 12px; margin: 0; font-size: 12px; color: var(--graphite); }
+.option[aria-pressed="true"] .tag { color: var(--teal); }
+
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
+@media (max-width: 520px) { .fields { grid-template-columns: 1fr; } }
+.field label { display: block; font-size: 13px; color: var(--graphite); margin-bottom: 4px; }
+.field small { display: block; font-size: 12px; color: var(--graphite); margin-top: 4px; }
+input[type=text], select { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 4px; background: var(--sheet); color: var(--ink); font: inherit; }
+input[type=text]:hover, select:hover { border-color: var(--graphite); }
+
+.actions { margin-top: 28px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+button.primary { padding: 11px 20px; border: 0; border-radius: 4px; background: var(--teal); color: var(--on-teal); font: 600 15px/1 var(--sans); cursor: pointer; }
+button.primary:disabled { opacity: .55; cursor: progress; }
+.note { font-size: 14px; color: var(--graphite); margin: 0; }
+.note.bad { color: var(--bad); }
+.note.ok { color: var(--ok); }
+:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+.place { border-top: 1px solid var(--line); padding: 16px 0 14px; }
+.place:last-of-type { border-bottom: 1px solid var(--line); }
+.place header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin: 0 0 10px; }
+.place h4 { font: 500 17px/1.3 var(--serif); margin: 0; }
+.place header span { font-size: 13px; color: var(--graphite); }
+.place header .granted { color: var(--ok); }
+.ops { display: flex; flex-wrap: wrap; gap: 6px 8px; }
+.op { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 8px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; cursor: pointer; background: var(--sheet); }
+.op:has(input:checked) { border-color: var(--teal); background: var(--teal-soft); }
+.op input { margin: 0; accent-color: var(--teal); }
+
+/* The catalog card. */
+.card { position: sticky; top: 24px; background: var(--sheet); border: 1px solid var(--line); border-top: 3px solid var(--rule); border-radius: 2px 2px 6px 6px; padding: 20px 22px 18px; }
+/* Ruled like a catalog card: one hairline under every 28px row. */
+.ruled { background-image: linear-gradient(to bottom, transparent 27px, var(--line) 27px); background-size: 100% 28px; }
+@media (max-width: 880px) { .card { position: static; } }
+.card h2 { font: 400 19px/1.2 var(--serif); margin: 0; }
+.card .who { font-size: 13px; color: var(--graphite); margin: 2px 0 12px; min-height: 20px; }
+.card .ruled + .ruled { margin-top: 28px; }
+.tree, .tree ul { list-style: none; margin: 0; padding: 0; }
+.tree li { font: 16px/28px var(--serif); display: block; position: relative; }
+.tree ul { padding-left: 22px; }
+.tree ul > li::before { content: ""; position: absolute; left: -14px; top: 0; height: 14px; width: 9px; border-left: 1px solid var(--graphite); border-bottom: 1px solid var(--graphite); }
+.tree ul > li:not(:last-child)::after { content: ""; position: absolute; left: -14px; top: 14px; bottom: 0; border-left: 1px solid var(--graphite); }
+.tree .row { display: flex; justify-content: space-between; gap: 12px; line-height: 25px; padding-bottom: 3px; }
+.tree .kind { font: 12px/25px var(--sans); color: var(--graphite); white-space: nowrap; }
+.tree .mark { display: inline-block; width: 14px; margin-right: 6px; color: var(--graphite); font: 13px/25px var(--sans); }
+.tree .built .mark { color: var(--ok); }
+.tree .issue .mark { color: var(--bad); }
+.facts { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0 14px; font-size: 13px; line-height: 28px; }
+.facts dt { color: var(--graphite); }
+.facts dd { margin: 0; }
+/* The home page holds the two tables: drawn as one page (accent bar and tint), not as a tree,
+   and without borders so the 28px ruling stays aligned. */
+.tree li.home > .page { background: var(--teal-soft); box-shadow: inset 3px 0 0 var(--teal); padding-left: 10px; margin-left: -10px; }
+.tree li.home .row.inside { padding-left: 22px; }
+.tree .glyph { display: inline-block; width: 14px; margin-right: 6px; color: var(--teal); font: 13px/25px var(--sans); }
+@media (prefers-reduced-motion: no-preference) { .tree .mark { transition: color .4s ease; } }
+</style>
+</head>
+<body>
+<main id="app" aria-live="polite"></main>
+<script>
+"use strict";
+
+const TEXT = {
+  en: {
+    title: "Set up GPK",
+    lede: "Choose where GPK keeps your work, shape the structure, and decide what GPK may change. Everything you decide here is saved on this computer.",
+    steps: ["Connect", "Structure", "Permissions", "Ready"],
+    connectTitle: "Connect a knowledge base",
+    connectIntro: "GPK keeps Areas, Projects, Tasks and knowledge in a knowledge base you already use. It connects with its own authorization, separate from any other app.",
+    available: "Available", soon: "Coming soon",
+    backends: { craft: "Documents, tables and daily notes", notion: "Pages and databases", obsidian: "Local Markdown vault", lark: "Docs and wiki spaces" },
+    connect: name => `Connect ${name}`, connecting: name => `Waiting for ${name} to confirm…`,
+    reopen: "Open the authorization page again", authFailed: "Authorization did not finish:",
+    structureTitle: "Shape the structure",
+    structureIntro: name => `Connected to ${name}. GPK creates the structure shown in Your workspace; nothing you already have is changed.`,
+    modeTitle: "Workspace", modeHint: "Where GPK puts what it creates.",
+    dedicated: "Dedicated to GPK", dedicatedHint: "Everything at the top level",
+    shared: "Shared with other notes", sharedHint: "Everything inside one folder",
+    langTitle: "Languages", langHint: "Names and headings can stay English while you work in another language.",
+    working: "Working language", workingHint: "Conversation and what GPK writes into records",
+    metadata: "Metadata language", metadataHint: "Folder, table and view names, template headings",
+    timezone: "Timezone", timezoneHint: tz => `Empty uses the workspace timezone${tz ? ` (${tz})` : ""}`,
+    namesTitle: "Names", namesHint: "Shown in your knowledge base. Edit them freely.",
+    host: "Home page", areas: "Areas", projects: "Projects", sources: "Sources", wikis: "Wikis", outputs: "Outputs",
+    create: "Create the structure", creating: "Creating the structure…",
+    permsTitle: "Choose what GPK may change",
+    permsIntro: "Each group is one place in your knowledge base. Untick anything GPK should not do. Deleting, archiving and restoring are never offered here.",
+    grant: "Save permissions", granting: "Saving permissions…", alreadyGranted: "Granted",
+    readyTitle: "GPK is ready",
+    readyIntro: "Go back to your conversation; the Agent can work in your knowledge base now. You can change these preferences at any time.",
+    save: "Save preferences", saved: "Preferences saved.", saving: "Saving…",
+    planTitle: "Your workspace", planEmpty: "Not connected yet",
+    kinds: { page: "home page", table: "table on the page", folder: "folder", templates: "templates" },
+    templates: "Entity templates",
+    facts: { working: "Working", metadata: "Metadata", permissions: "Permissions" },
+    granted: n => `${n} place${n === 1 ? "" : "s"}`, none: "none yet",
+    places: { "daily-notes": ["Daily notes", "Tasks you accept for a day"], inbox: ["Inbox", "Captured reminders"], system: ["GPK system page", "Progress of long-running work"] },
+    roleHints: { area: "Ongoing responsibilities", project: "Projects and their tasks", source: "Material you collect", wiki: "Explanations you maintain", output: "Things you produce" },
+    ops: {
+      "tasks.create": "Create tasks", "tasks.update": "Edit tasks", "tasks.transition": "Change task state", "tasks.schedule": "Schedule tasks", "tasks.assignProject": "Move tasks between projects",
+      "captures.append": "Add captures", "checkpoints.save": "Save progress",
+      "projects.create": "Create projects", "projects.update": "Edit projects", "projects.transition": "Change project state", "projects.assignArea": "Change a project's area", "projects.orderTasks": "Reorder tasks",
+      "projects.materials.append": "Add material", "projects.materials.update": "Edit material",
+      "areas.create": "Create areas", "areas.update": "Edit areas", "areas.transition": "Change area state",
+      "sources.create": "Add sources", "sources.update": "Edit sources", "wikis.create": "Create wikis", "wikis.update": "Revise wikis",
+      "outputs.create": "Add outputs", "outputs.update": "Edit outputs", "links.add": "Link records",
+    },
+    retry: "Ask the Agent to open GPK setup again.",
+  },
+  "zh-CN": {
+    title: "设置 GPK",
+    lede: "选择 GPK 存放工作的地方，确定结构，再决定 GPK 可以修改什么。这里的每个决定都保存在这台电脑上。",
+    steps: ["连接", "结构", "权限", "就绪"],
+    connectTitle: "连接知识库",
+    connectIntro: "GPK 把领域、项目、任务和知识放在你已经在用的知识库里。它使用自己的授权连接，与其他应用互不影响。",
+    available: "可用", soon: "即将支持",
+    backends: { craft: "文档、表格和每日笔记", notion: "页面与数据库", obsidian: "本地 Markdown 库", lark: "飞书文档与知识库" },
+    connect: name => `连接 ${name}`, connecting: name => `等待 ${name} 确认授权…`,
+    reopen: "重新打开授权页面", authFailed: "授权没有完成：",
+    structureTitle: "确定结构",
+    structureIntro: name => `已连接到 ${name}。GPK 会创建「你的工作区」里列出的结构，不会改动你已有的任何内容。`,
+    modeTitle: "工作区", modeHint: "GPK 创建的内容放在哪里。",
+    dedicated: "专用于 GPK", dedicatedHint: "全部放在顶层",
+    shared: "与其他笔记共用", sharedHint: "全部放进一个文件夹",
+    langTitle: "语言", langHint: "名称和标题可以保持英文，工作时使用另一种语言。",
+    working: "工作语言", workingHint: "对话以及 GPK 写入记录的内容",
+    metadata: "元数据语言", metadataHint: "文件夹、表格和视图名称，模板标题",
+    timezone: "时区", timezoneHint: tz => `留空则使用工作区时区${tz ? `（${tz}）` : ""}`,
+    namesTitle: "名称", namesHint: "显示在你的知识库里，可以随意修改。",
+    host: "主页", areas: "领域", projects: "项目", sources: "来源", wikis: "知识", outputs: "产出",
+    create: "创建结构", creating: "正在创建结构…",
+    permsTitle: "选择 GPK 可以修改什么",
+    permsIntro: "每一组对应知识库里的一个位置。不希望 GPK 做的，取消勾选即可。删除、归档和恢复不会在这里提供。",
+    grant: "保存权限", granting: "正在保存权限…", alreadyGranted: "已授予",
+    readyTitle: "GPK 已就绪",
+    readyIntro: "回到对话即可，Agent 现在可以在你的知识库里工作了。这些偏好随时可以修改。",
+    save: "保存偏好", saved: "偏好已保存。", saving: "正在保存…",
+    planTitle: "你的工作区", planEmpty: "尚未连接",
+    kinds: { page: "主页", table: "页内表格", folder: "文件夹", templates: "模板" },
+    templates: "实体模板",
+    facts: { working: "工作语言", metadata: "元数据", permissions: "权限" },
+    granted: n => `${n} 个位置`, none: "尚未授予",
+    places: { "daily-notes": ["每日笔记", "你在某一天接受的任务"], inbox: ["收件箱", "捕获的提醒"], system: ["GPK 系统页面", "长时间处理的进度"] },
+    roleHints: { area: "持续负责的方向", project: "项目及其任务", source: "收集的材料", wiki: "持续整理的知识", output: "产出的成果" },
+    ops: {
+      "tasks.create": "创建任务", "tasks.update": "编辑任务", "tasks.transition": "变更任务状态", "tasks.schedule": "安排任务时间", "tasks.assignProject": "在项目间移动任务",
+      "captures.append": "添加捕获", "checkpoints.save": "保存进度",
+      "projects.create": "创建项目", "projects.update": "编辑项目", "projects.transition": "变更项目状态", "projects.assignArea": "更改项目所属领域", "projects.orderTasks": "调整任务顺序",
+      "projects.materials.append": "添加材料", "projects.materials.update": "编辑材料",
+      "areas.create": "创建领域", "areas.update": "编辑领域", "areas.transition": "变更领域状态",
+      "sources.create": "添加来源", "sources.update": "编辑来源", "wikis.create": "创建知识", "wikis.update": "修订知识",
+      "outputs.create": "添加产出", "outputs.update": "编辑产出", "links.add": "关联记录",
+    },
+    retry: "请让 Agent 重新打开 GPK 设置。",
+  },
+};
+const DEFAULT_NAMES = {
+  en: { host: "GPK", areas: "Areas", projects: "Projects", sources: "Sources", wikis: "Wikis", outputs: "Outputs" },
+  "zh-CN": { host: "GPK", areas: "领域", projects: "项目", sources: "来源", wikis: "知识", outputs: "产出" },
+};
+const LANGUAGES = [["en", "English"], ["zh-CN", "中文"]];
+
+let lang = (navigator.language || "").toLowerCase().startsWith("zh") ? "zh-CN" : "en";
+let state = null, form = null, note = null, busy = false, namesEdited = false, polling = null, backend = "craft";
+const selection = new Map();
+const t = key => TEXT[lang][key];
+
+function h(tag, props, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(props || {})) {
+    if (value === undefined || value === null || value === false) continue;
+    if (key === "on") for (const [event, fn] of Object.entries(value)) node.addEventListener(event, fn);
+    else if (key === "className" || key === "value" || key === "checked" || key === "disabled" || key === "selected") node[key] = value;
+    else node.setAttribute(key, value === true ? "" : value);
+  }
+  for (const child of children.flat()) if (child !== null && child !== undefined && child !== false) node.append(child instanceof Node ? child : String(child));
+  return node;
+}
+
+async function api(method, path, body) {
+  try {
+    const response = await fetch(path, { method, credentials: "same-origin", headers: body ? { "content-type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
+    if (!response.ok) return { ok: false, error: { message: `HTTP ${response.status}.`, next: t("retry") } };
+    return await response.json();
+  } catch {
+    return { ok: false, error: { message: "GPK is not running.", next: t("retry") } };
+  }
+}
+const errorText = result => result.error ? `${result.error.message} ${result.error.next || ""}`.trim() : "";
+
+async function refresh() {
+  const result = await api("GET", "/api/state");
+  if (!result.ok) { note = { kind: "bad", text: errorText(result) }; render(); return; }
+  state = result.value;
+  if (state.preferences && TEXT[state.preferences.workingLanguage]) lang = state.preferences.workingLanguage;
+  if (!form) form = { workspace: looksDedicated() ? "dedicated" : "shared", workingLanguage: lang, metadataLanguage: lang, timezone: "", names: { ...DEFAULT_NAMES[lang] } };
+  const waiting = state.connection && state.connection.pendingAuthorizationUrl && state.connection.tokens !== "verified";
+  if (waiting && !polling) polling = setInterval(refresh, 2000);
+  if (!waiting && polling) { clearInterval(polling); polling = null; }
+  render();
+}
+
+function looksDedicated() {
+  const c = (state && state.layout && state.layout.candidates) || { folders: [], collections: [] };
+  return c.folders.filter(f => f.parentId === null && f.name !== "How to use Craft").length === 0 && c.collections.length === 0;
+}
+function stage() {
+  if (!state) return 0;
+  if ((state.connection || {}).tokens !== "verified") return 1;
+  if (state.settings !== "ready") return 2;
+  if (state.onboarding !== "complete") return 3;
+  return 4;
+}
+const backendName = () => ((state && state.backends) || []).find(b => b.id === backend)?.name || "";
+
+// ---------- views ----------
+function render() {
+  const app = document.getElementById("app");
+  document.documentElement.lang = lang;
+  if (!state) { app.replaceChildren(h("p", { className: "note" + (note ? " bad" : "") }, note ? note.text : "…")); return; }
+  const current = stage();
+  const done = current === 4;
+  const progress = h("ol", { className: "progress", "aria-label": "Progress" }, t("steps").map((label, i) =>
+    h("li", { className: i + 1 < current || done ? "past" : i + 1 === current ? "current" : "", "aria-current": i + 1 === current ? "step" : null },
+      h("span", { className: "n" }, i + 1 < current || done ? "✓" : String(i + 1)), label)));
+  const flow = current === 1 ? connectView() : current === 2 ? structureView() : current === 3 ? permissionsView() : readyView();
+  app.replaceChildren(
+    h("header", {}, h("h1", {}, t("title")), h("p", { className: "lede" }, t("lede")), progress),
+    h("div", { className: "layout" }, h("section", { className: "flow" }, flow), planCard()));
+}
+
+function actionRow(label, busyLabel, onClick) {
+  return h("div", { className: "actions" },
+    h("button", { className: "primary", type: "button", disabled: busy, on: { click: onClick } }, busy ? busyLabel : label),
+    note ? h("p", { className: `note ${note.kind}`, role: note.kind === "bad" ? "alert" : null }, note.text) : null);
+}
+
+function connectView() {
+  const connection = state.connection || {};
+  const waiting = connection.pendingAuthorizationUrl;
+  const options = h("div", { className: "options", role: "list" }, (state.backends || []).map(entry =>
+    h("button", {
+      type: "button", className: "option", role: "listitem",
+      "aria-pressed": entry.available && entry.id === backend ? "true" : "false",
+      "aria-disabled": entry.available ? null : "true",
+      on: { click: () => { if (entry.available) { backend = entry.id; render(); } } },
+    },
+    h("strong", {}, entry.name), h("span", {}, TEXT[lang].backends[entry.id] || ""),
+    h("span", { className: "tag" }, entry.available ? t("available") : t("soon")))));
+  return [
+    h("h2", {}, t("connectTitle")), h("p", { className: "intro" }, t("connectIntro")),
+    options,
+    connection.authorizationError ? h("p", { className: "note bad", role: "alert" }, `${t("authFailed")} ${connection.authorizationError}`) : null,
+    waiting ? h("p", { className: "note" }, t("connecting")(backendName()), " ", h("a", { href: waiting }, t("reopen"))) : null,
+    actionRow(t("connect")(backendName()), t("connecting")(backendName()), async () => {
+      busy = true; note = null; render();
+      const result = await api("POST", "/api/authorize", { backend });
+      busy = false;
+      if (!result.ok) { note = { kind: "bad", text: errorText(result) }; render(); return; }
+      if (result.value.authorizationUrl) { location.href = result.value.authorizationUrl; return; }
+      refresh();
+    }),
+  ];
+}
+
+function select(id, key, onChange) {
+  return h("select", { id, on: { change: event => { form[key] = event.target.value; if (onChange) onChange(); render(); } } },
+    LANGUAGES.map(([value, label]) => h("option", { value, selected: form[key] === value }, label)));
+}
+function nameField(key) {
+  return h("div", { className: "field" }, h("label", { for: `name-${key}` }, t(key)),
+    h("input", { type: "text", id: `name-${key}`, value: form.names[key], maxlength: "80", on: { input: event => { form.names[key] = event.target.value; namesEdited = true; renderPlan(); } } }));
+}
+
+function structureView() {
+  const space = (state.connection || {}).space || {};
+  const mode = (value, title, hint) => h("button", { type: "button", className: "option", "aria-pressed": form.workspace === value ? "true" : "false", on: { click: () => { form.workspace = value; render(); } } },
+    h("strong", {}, title), h("span", {}, hint));
+  return [
+    h("h2", {}, t("structureTitle")), h("p", { className: "intro" }, t("structureIntro")(space.name || backendName())),
+    h("div", { className: "group" }, h("h3", {}, t("modeTitle")), h("p", {}, t("modeHint")),
+      h("div", { className: "options" }, mode("dedicated", t("dedicated"), t("dedicatedHint")), mode("shared", t("shared"), t("sharedHint")))),
+    h("div", { className: "group" }, h("h3", {}, t("langTitle")), h("p", {}, t("langHint")),
+      h("div", { className: "fields" },
+        h("div", { className: "field" }, h("label", { for: "working" }, t("working")), select("working", "workingLanguage", () => { lang = form.workingLanguage; }), h("small", {}, t("workingHint"))),
+        h("div", { className: "field" }, h("label", { for: "metadata" }, t("metadata")), select("metadata", "metadataLanguage", () => { if (!namesEdited) form.names = { ...DEFAULT_NAMES[form.metadataLanguage] }; }), h("small", {}, t("metadataHint"))),
+        h("div", { className: "field" }, h("label", { for: "timezone" }, t("timezone")),
+          h("input", { type: "text", id: "timezone", value: form.timezone, placeholder: space.timezone || "", on: { input: event => { form.timezone = event.target.value; } } }),
+          h("small", {}, t("timezoneHint")(space.timezone))))),
+    h("div", { className: "group" }, h("h3", {}, t("namesTitle")), h("p", {}, t("namesHint")),
+      h("div", { className: "fields" }, ["host", "areas", "projects", "sources", "wikis", "outputs"].map(nameField))),
+    actionRow(t("create"), t("creating"), async () => {
+      busy = true; note = null; render();
+      const result = await api("POST", "/api/establish", { ...form, timezone: form.timezone.trim() || null });
+      busy = false;
+      note = result.ok ? null : { kind: "bad", text: errorText(result) };
+      refresh();
+    }),
+  ];
+}
+
+function placeName(rootId) {
+  if (TEXT[lang].places[rootId]) return TEXT[lang].places[rootId];
+  const location = ((state.layout || {}).locations || []).find(entry => entry.ref.id === rootId);
+  return location ? [builtName(location) || t(location.role + "s"), TEXT[lang].roleHints[location.role] || ""] : [rootId, ""];
+}
+function builtName(location) { const m = /"([^"]+)"/.exec(location.detail || ""); return m ? m[1] : ""; }
+
+function permissionsView() {
+  const proposal = state.proposal || [];
+  const granted = state.granted || [];
+  for (const grant of proposal) if (!selection.has(grant.root.id)) selection.set(grant.root.id, new Set(grant.operations));
+  const has = (root, op) => granted.some(g => g.root.id === root && g.operations.includes(op));
+  return [
+    h("h2", {}, t("permsTitle")), h("p", { className: "intro" }, t("permsIntro")),
+    h("div", { className: "group" }, proposal.map(grant => {
+      const [name, hint] = placeName(grant.root.id);
+      const chosen = selection.get(grant.root.id);
+      return h("div", { className: "place" },
+        h("header", {}, h("h4", {}, name), grant.operations.every(op => has(grant.root.id, op)) ? h("span", { className: "granted" }, t("alreadyGranted")) : h("span", {}, hint)),
+        h("div", { className: "ops" }, grant.operations.map(op => h("label", { className: "op", title: op },
+          h("input", { type: "checkbox", checked: chosen.has(op), on: { change: event => { event.target.checked ? chosen.add(op) : chosen.delete(op); renderPlan(); } } }),
+          TEXT[lang].ops[op] || op))));
+    })),
+    actionRow(t("grant"), t("granting"), async () => {
+      busy = true; note = null; render();
+      const result = await api("POST", "/api/grants", { grants: [...selection.entries()].map(([root, ops]) => ({ root, operations: [...ops] })) });
+      busy = false;
+      note = result.ok ? null : { kind: "bad", text: errorText(result) };
+      refresh();
+    }),
+  ];
+}
+
+function readyView() {
+  const prefs = state.preferences || {};
+  const edit = { workingLanguage: prefs.workingLanguage || lang, timezone: prefs.timezone || "" };
+  const space = (state.connection || {}).space || {};
+  return [
+    h("h2", {}, t("readyTitle")), h("p", { className: "intro" }, t("readyIntro")),
+    h("div", { className: "group" }, h("div", { className: "fields" },
+      h("div", { className: "field" }, h("label", { for: "ready-working" }, t("working")),
+        h("select", { id: "ready-working", on: { change: event => { edit.workingLanguage = event.target.value; } } }, LANGUAGES.map(([value, label]) => h("option", { value, selected: edit.workingLanguage === value }, label)))),
+      h("div", { className: "field" }, h("label", { for: "ready-timezone" }, t("timezone")),
+        h("input", { type: "text", id: "ready-timezone", value: edit.timezone, placeholder: space.timezone || "", on: { input: event => { edit.timezone = event.target.value; } } }),
+        h("small", {}, t("timezoneHint")(space.timezone))))),
+    actionRow(t("save"), t("saving"), async () => {
+      busy = true; note = null; render();
+      const result = await api("POST", "/api/preferences", { workingLanguage: edit.workingLanguage, timezone: edit.timezone.trim() || null });
+      busy = false;
+      note = result.ok || /nothing|no change/i.test(errorText(result)) ? { kind: "ok", text: t("saved") } : { kind: "bad", text: errorText(result) };
+      refresh();
+    }),
+  ];
+}
+
+// ---------- the catalog card ----------
+function planCard() { return h("aside", { className: "card", id: "plan", "aria-label": t("planTitle") }, planContent()); }
+function renderPlan() { const card = document.getElementById("plan"); if (card) card.replaceChildren(...planContent()); }
+
+function planContent() {
+  const connected = (state.connection || {}).tokens === "verified";
+  const space = (state.connection || {}).space;
+  const built = state.settings === "ready";
+  const locations = (state.layout || {}).locations || [];
+  const status = role => { if (!built) return "planned"; const l = locations.find(x => x.role === role); return l && l.status === "ok" ? "built" : "issue"; };
+  const name = (role, key) => { if (built) { const l = locations.find(x => x.role === role); if (l && builtName(l)) return builtName(l); } return (form && form.names[key]) || DEFAULT_NAMES[lang][key]; };
+  const entry = (label, kind, role, extra) => {
+    const s = role ? status(role) : built ? "built" : "planned";
+    return h("div", { className: `row ${s}${extra ? " " + extra : ""}` },
+      h("span", {}, h("span", { className: "mark", "aria-hidden": "true" }, s === "built" ? "✓" : s === "issue" ? "!" : "○"),
+        kind === "table" ? h("span", { className: "glyph", "aria-hidden": "true" }, "▦") : null, label),
+      h("span", { className: "kind" }, TEXT[lang].kinds[kind]));
+  };
+  const items = [
+    h("li", { className: "home" }, h("div", { className: "page" },
+      entry((form && form.names.host) || "GPK", "page", null),
+      entry(name("area", "areas"), "table", "area", "inside"),
+      entry(name("project", "projects"), "table", "project", "inside"))),
+    h("li", {}, entry(name("source", "sources"), "folder", "source")),
+    h("li", {}, entry(name("wiki", "wikis"), "folder", "wiki")),
+    h("li", {}, entry(name("output", "outputs"), "folder", "output")),
+  ];
+  const shared = form && form.workspace === "shared" && !built;
+  const tree = shared
+    ? h("ul", { className: "tree" }, h("li", {}, entry((form && form.names.host) || "GPK", "folder", null), h("ul", {}, items)))
+    : h("ul", { className: "tree" }, items);
+  const grantedPlaces = (state.granted || []).length;
+  const prefs = state.preferences || (form ? { workingLanguage: form.workingLanguage, metadataLanguage: form.metadataLanguage } : {});
+  const label = code => (LANGUAGES.find(([v]) => v === code) || [code, code])[1];
+  return [
+    h("h2", {}, t("planTitle")),
+    h("p", { className: "who" }, connected ? `${backendName()}${space ? ` / ${space.name}` : ""}` : t("planEmpty")),
+    h("div", { className: "ruled" }, tree, h("ul", { className: "tree" }, h("li", {}, entry(t("templates"), "templates", null)))),
+    h("dl", { className: "facts ruled" },
+      h("dt", {}, t("facts").working), h("dd", {}, prefs.workingLanguage ? label(prefs.workingLanguage) : "—"),
+      h("dt", {}, t("facts").metadata), h("dd", {}, prefs.metadataLanguage ? label(prefs.metadataLanguage) : "—"),
+      h("dt", {}, t("facts").permissions), h("dd", {}, grantedPlaces ? t("granted")(grantedPlaces) : t("none"))),
+  ];
+}
+
+refresh();
+</script>
+</body>
+</html>

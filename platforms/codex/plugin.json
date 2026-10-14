@@ -1,0 +1,19 @@
+{
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "hooks": "./hooks/entry.json",
+  "interface": {
+    "displayName": "GPK",
+    "shortDescription": "Goals, Projects, Tasks and knowledge in Craft",
+    "longDescription": "A portable goal- and project-driven knowledge method. Skills for setup, planning, daily work, ingesting material and review, backed by a local MCP runtime that reads and writes Areas, Projects, Tasks, Sources, Wikis and Outputs in Craft under explicit grants.",
+    "category": "Productivity",
+    "capabilities": [
+      "skills"
+    ],
+    "brandColor": "#4F6F52",
+    "defaultPrompt": [
+      "Set up GPK.",
+      "What should I work on next?"
+    ]
+  }
+}
