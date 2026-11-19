@@ -1,0 +1,6 @@
+interface:
+  display_name: "GPK"
+  short_description: "GPK method, records and routing"
+  default_prompt: "Use $gpk to explain how GPK organizes goals, Projects and knowledge."
+policy:
+  allow_implicit_invocation: true
