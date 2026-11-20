@@ -1,0 +1,10 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "displayName": "GPK",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Set up GPK.",
+    "What should I work on next?",
+    "Review my active Projects."
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "description_zh": "GPK 目标、项目与知识管理方法论及工作流路由。",
+  "description_en": "GPK goal, project, and knowledge workflows and routing.",
+  "skills": {
+    "gpk": {
+      "description_zh": "解释 GPK 目标、项目与知识方法，路由 Setup、Plan、Work、Ingest 与 Review 工作流。",
+      "description_en": "Explain the GPK method and route Setup, Plan, Work, Ingest, and Review workflows."
+    },
+    "gpk-setup": {
+      "description_zh": "检查 GPK 就绪状态，打开浏览器配置知识库连接、工作区结构与授权权限。",
+      "description_en": "Check GPK readiness and open the browser console to connect a workspace and grant permissions."
+    },
+    "gpk-plan": {
+      "description_zh": "将目标拆解为关联领域的项目（Objective、KR 与首批任务），维护领域方向。",
+      "description_en": "Frame goals into Area-linked Projects with Objectives, KRs, and initial Tasks."
+    },
+    "gpk-work": {
+      "description_zh": "聚焦下一步可执行行动，推进任务状态、记录项目材料与每日活动。",
+      "description_en": "Pick the next executable action, advance Task state, and record Project progress."
+    },
+    "gpk-ingest": {
+      "description_zh": "按捕获、研读或深研深度沉淀外部资料、导入笔记与开发会话记录。",
+      "description_en": "Capture, study, or research external sources, imported notes, and coding sessions."
+    },
+    "gpk-review": {
+      "description_zh": "执行日/周/月复盘，对齐收件箱、逾期任务、在途项目信号与领域状态。",
+      "description_en": "Run daily, weekly, or monthly reviews across captures, Tasks, Projects, and Areas."
+    }
+  }
+}

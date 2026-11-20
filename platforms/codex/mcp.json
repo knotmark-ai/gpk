@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "gpk": {
+      "type": "stdio",
+      "command": "node",
+      "cwd": ".",
+      "args": [
+        "./mcp/stdio.mjs"
+      ]
+    }
+  }
+}

@@ -1,0 +1,2210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
+<title>GPK Setup</title>
+<style>
+/* Modern editorial craft: crisp surfaces, tactile switches, tabular monospace accents,
+   Skill-to-MCP orchestration map, and GPK's coral-ruled workspace card. Zero network requests. */
+:root, html[data-theme="light"] {
+  --bg: #f4f5f2;
+  --rail-bg: #eceee9;
+  --surface: #ffffff;
+  --surface-2: #f7f8f5;
+  --surface-hover: #f0f2ee;
+  --ink: #15201f;
+  --muted: #5a6765;
+  --faint: #879491;
+  --line: rgba(21, 32, 31, 0.09);
+  --line-strong: rgba(21, 32, 31, 0.18);
+  --accent: #0e5f63;
+  --accent-hover: #0a4c50;
+  --accent-soft: rgba(14, 95, 99, 0.09);
+  --on-accent: #f7fbfb;
+  --coral: #c83e37;
+  --ok: #1d7a46;
+  --ok-soft: rgba(29, 122, 70, 0.11);
+  --warn: #b05f11;
+  --warn-soft: rgba(176, 95, 17, 0.12);
+  --bad: #c2332a;
+  --bad-soft: rgba(194, 51, 42, 0.10);
+  --track: #cbd2cd;
+  --knob: #ffffff;
+  --shadow: 0 1px 2px rgba(16, 24, 22, 0.04), 0 6px 20px rgba(16, 24, 22, 0.03);
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Songti SC", "Noto Serif CJK SC", serif;
+  --mono: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) {
+    --bg: #0c1012;
+    --rail-bg: #101518;
+    --surface: #151b1e;
+    --surface-2: #101518;
+    --surface-hover: #1b2327;
+    --ink: #ecf1f0;
+    --muted: #93a19f;
+    --faint: #647270;
+    --line: rgba(255, 255, 255, 0.08);
+    --line-strong: rgba(255, 255, 255, 0.16);
+    --accent: #4cc9c0;
+    --accent-hover: #62d4cc;
+    --accent-soft: rgba(76, 201, 192, 0.13);
+    --on-accent: #071918;
+    --coral: #e3655b;
+    --ok: #4cc38a;
+    --ok-soft: rgba(76, 195, 138, 0.14);
+    --warn: #f0a44c;
+    --warn-soft: rgba(240, 164, 76, 0.15);
+    --bad: #f26d65;
+    --bad-soft: rgba(242, 109, 101, 0.14);
+    --track: #344144;
+    --knob: #f2f6f5;
+    --shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 10px 28px rgba(0, 0, 0, 0.32);
+    color-scheme: dark;
+  }
+}
+html[data-theme="dark"] {
+  --bg: #0c1012;
+  --rail-bg: #101518;
+  --surface: #151b1e;
+  --surface-2: #101518;
+  --surface-hover: #1b2327;
+  --ink: #ecf1f0;
+  --muted: #93a19f;
+  --faint: #647270;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --accent: #4cc9c0;
+  --accent-hover: #62d4cc;
+  --accent-soft: rgba(76, 201, 192, 0.13);
+  --on-accent: #071918;
+  --coral: #e3655b;
+  --ok: #4cc38a;
+  --ok-soft: rgba(76, 195, 138, 0.14);
+  --warn: #f0a44c;
+  --warn-soft: rgba(240, 164, 76, 0.15);
+  --bad: #f26d65;
+  --bad-soft: rgba(242, 109, 101, 0.14);
+  --track: #344144;
+  --knob: #f2f6f5;
+  --shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 10px 28px rgba(0, 0, 0, 0.32);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body {
+  margin: 0;
+  color: var(--ink);
+  font: 14.5px/1.6 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+/* App Shell */
+.shell {
+  display: grid;
+  grid-template-columns: 244px minmax(0, 1fr);
+  min-height: 100vh;
+}
+.rail {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 24px 16px 18px;
+  background: var(--rail-bg);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.brand-wrap {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 2px 8px;
+}
+.brand-logo { width: 34px; height: 34px; flex: none; border-radius: 8px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.14); }
+.brand-text { display: flex; flex-direction: column; line-height: 1.15; }
+.brand { font: 700 18px/1.1 var(--sans); letter-spacing: -0.02em; color: var(--ink); }
+.brand-sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+nav { display: grid; gap: 4px; }
+nav a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 9px 11px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background .14s ease, color .14s ease;
+}
+nav a:hover { background: var(--surface-hover); color: var(--ink); text-decoration: none; }
+nav a[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.nav-icon { width: 15px; height: 15px; flex: none; display: block; }
+nav a .nav-icon { width: 16px; height: 16px; opacity: .88; }
+nav a .nav-count {
+  margin-left: auto;
+  font: 500 11.5px/1.4 var(--mono);
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+nav a[aria-current="page"] .nav-count {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.rail-footer {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.seg button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: 500 12px/1 var(--sans);
+  padding: 5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+/* Main Content */
+main {
+  width: 100%;
+  max-width: 1080px;
+  min-width: 0;
+  margin: 0 auto;
+  padding: 36px clamp(20px, 4vw, 52px) 80px;
+}
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.page-head h1 {
+  font: 650 26px/1.2 var(--sans);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.page-sub {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 5px 0 0;
+  max-width: 72ch;
+}
+.stack { display: grid; gap: 18px; }
+.onboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 22px;
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .onboard-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .shell { display: block; }
+  .rail {
+    position: static;
+    height: auto;
+    padding: 14px 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    gap: 12px;
+  }
+  .rail-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  nav { display: flex; flex-wrap: wrap; gap: 4px; }
+  nav a { padding: 6px 10px; font-size: 13.5px; }
+  nav a .nav-count { display: none; }
+  .rail-footer { margin-top: 0; padding-top: 10px; }
+  main { padding: 24px 16px 64px; }
+}
+
+/* Cards & Panels */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 22px 24px;
+  box-shadow: var(--shadow);
+}
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.panel h2 {
+  font: 600 17px/1.3 var(--sans);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.panel > p.intro, .panel-sub {
+  color: var(--muted);
+  font-size: 13.5px;
+  margin: 4px 0 0;
+  max-width: 70ch;
+}
+.group { margin-top: 20px; }
+.group:first-child { margin-top: 0; }
+.group > h3 {
+  font: 600 13.5px/1.4 var(--sans);
+  color: var(--ink);
+  margin: 0 0 4px;
+}
+.group > p {
+  color: var(--muted);
+  font-size: 13.5px;
+  margin: 0 0 12px;
+}
+
+/* KPI Stat Cards on Status Page */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+@media (max-width: 720px) { .stats { grid-template-columns: 1fr; } }
+.stat {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.stat-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.stat-label { font-size: 12.5px; font-weight: 500; color: var(--muted); }
+.stat-value { font: 650 20px/1.2 var(--sans); letter-spacing: -0.015em; color: var(--ink); overflow-wrap: anywhere; }
+.stat-meta { font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* Badges & Code Chips */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font: 500 12px/1.35 var(--sans);
+  white-space: nowrap;
+}
+.badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.badge.ok { background: var(--ok-soft); color: var(--ok); }
+.badge.warn { background: var(--warn-soft); color: var(--warn); }
+.badge.bad { background: var(--bad-soft); color: var(--bad); }
+.badge.neutral { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+.badge.accent { background: var(--accent-soft); color: var(--accent); }
+
+.mono-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 12.5px/1.4 var(--mono);
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  word-break: break-all;
+}
+
+/* Key-Value Definition Rows */
+.rows { margin: 0; border-top: 1px solid var(--line); }
+.rows > div {
+  display: grid;
+  grid-template-columns: minmax(140px, 30%) minmax(0, 1fr);
+  gap: 8px 16px;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  padding: 11px 0;
+}
+.rows > div:last-child { border-bottom: 0; padding-bottom: 2px; }
+.rows dt { color: var(--muted); font-size: 13.5px; }
+.rows dd { margin: 0; overflow-wrap: anywhere; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.muted { color: var(--muted); }
+
+/* Selection Cards (Workspace Mode / Existing Workspace) */
+.options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 540px) { .options { grid-template-columns: 1fr; } }
+.option {
+  position: relative;
+  text-align: left;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color .14s ease, background .14s ease;
+}
+.option:hover { border-color: var(--line-strong); background: var(--surface-hover); }
+.option[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.option strong { display: block; font-size: 14.5px; font-weight: 600; }
+.option span { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+.existing { display: grid; gap: 10px; }
+
+/* Form Inputs */
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
+@media (max-width: 600px) { .fields { grid-template-columns: 1fr; } }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field.full { grid-column: 1 / -1; }
+.field label { font-size: 13px; font-weight: 500; color: var(--ink); }
+.field small { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.clash-slot { min-height: 0; }
+.clash { display: block; color: var(--warn); font-size: 12.5px; margin-top: 3px; }
+.clash.adopted { color: var(--ok); }
+.clash button { padding: 0; margin-left: 5px; border: 0; background: none; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }
+
+input:is([type=text],[type=url],[type=password],[type=search]), select, textarea {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font: 14px/1.4 var(--sans);
+  transition: border-color .14s ease, box-shadow .14s ease, background .14s ease;
+}
+input:is([type=text],[type=url],[type=password],[type=search]):focus, select:focus, textarea:focus {
+  background: var(--surface);
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+textarea { resize: vertical; min-height: 76px; }
+.pw-wrap { position: relative; display: flex; align-items: center; }
+.pw-wrap input { padding-right: 64px; }
+.pw-toggle {
+  position: absolute;
+  right: 6px;
+  border: 0;
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font: 500 12px/1.2 var(--sans);
+  cursor: pointer;
+}
+.pw-toggle:hover { color: var(--ink); }
+
+/* Buttons */
+.actions { margin-top: 18px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+button.primary {
+  min-height: 38px;
+  padding: 9px 18px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font: 600 14px/1.2 var(--sans);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background .14s ease, opacity .14s ease;
+}
+button.primary:hover:not(:disabled) { background: var(--accent-hover); }
+button.primary:disabled { opacity: .55; cursor: progress; }
+
+button.secondary, a.secondary {
+  min-height: 34px;
+  padding: 7px 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font: 500 13px/1.2 var(--sans);
+  white-space: nowrap;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  transition: background .14s ease, border-color .14s ease;
+}
+button.secondary .nav-icon, a.secondary .nav-icon { width: 14px; height: 14px; }
+button.secondary:hover:not(:disabled), a.secondary:hover {
+  background: var(--surface-hover);
+  border-color: var(--muted);
+  text-decoration: none;
+}
+button.secondary:disabled { opacity: .5; cursor: not-allowed; }
+
+.linkish {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: 500 13.5px/1.4 var(--sans);
+  cursor: pointer;
+}
+.linkish:hover { text-decoration: underline; }
+.linkish.danger { color: var(--bad); }
+
+/* Tactile Switches */
+.switch {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  width: 42px;
+  height: 24px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--track);
+  position: relative;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--knob);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .28);
+}
+.switch:checked { background: var(--accent); }
+.switch:checked::after { transform: translateX(18px); }
+.switch:disabled { opacity: .55; cursor: not-allowed; }
+@media (prefers-reduced-motion: no-preference) {
+  .switch, .switch::after { transition: background .16s ease, transform .16s ease; }
+}
+
+.toggle-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+.toggle-banner.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.toggle-banner-text strong { display: block; font-size: 14.5px; font-weight: 600; }
+.toggle-banner-text span { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+details.fold { margin-top: 12px; }
+details.fold.divider { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+details > summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 13.5px;
+  font-weight: 500;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+details > summary::-webkit-details-marker { display: none; }
+details > summary::before { content: "▸"; display: inline-block; width: 10px; transition: transform .14s ease; }
+details[open] > summary::before { transform: rotate(90deg); }
+
+/* Signature Catalog Preview Card */
+.card {
+  position: sticky;
+  top: 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--coral);
+  border-radius: 6px 6px 12px 12px;
+  padding: 18px 20px 16px;
+  box-shadow: var(--shadow);
+}
+@media (max-width: 960px) { .card { position: static; } }
+.card h2 { font: 600 16px/1.25 var(--serif); margin: 0; }
+.card .who { font-size: 12.5px; color: var(--muted); margin: 3px 0 12px; }
+.tree, .tree ul { list-style: none; margin: 0; padding: 0; }
+.tree > li { border-bottom: 1px solid var(--line); }
+.tree > li:last-child { border-bottom: 0; }
+.tree ul { padding-left: 16px; }
+.entry { display: grid; grid-template-columns: 14px 18px minmax(0, 1fr) auto; column-gap: 6px; align-items: baseline; padding: 8px 0; }
+.entry .mark { font: 600 12px/1 var(--sans); color: var(--muted); }
+.entry.built .mark { color: var(--ok); }
+.entry.issue .mark { color: var(--bad); }
+.entry .icon { width: 15px; height: 15px; flex: none; align-self: center; color: var(--accent); }
+.entry .name { font: 600 14.5px/1.3 var(--sans); }
+.entry .kind { font: 11.5px/1.3 var(--sans); color: var(--muted); white-space: nowrap; }
+.entry .example { grid-column: 3 / 5; font-size: 12px; line-height: 1.45; color: var(--muted); margin-top: 2px; }
+.tree li.home { background: var(--accent-soft); border-radius: 8px; margin: 4px -8px; padding: 2px 8px; border-bottom: 0; }
+.tree li.templates .icon { color: var(--muted); }
+.facts { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--line); display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 12.5px; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; font-weight: 500; }
+
+/* Skill <-> MCP Visual Explorer */
+.skills-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 900px) { .skills-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 580px) { .skills-grid { grid-template-columns: 1fr; } }
+
+.skill-card {
+  text-align: left;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 15px;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color .14s ease, background .14s ease, transform .12s ease;
+}
+.skill-card:hover { border-color: var(--line-strong); background: var(--surface-hover); }
+.skill-card[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.skill-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.skill-id {
+  font: 600 12.5px/1.35 var(--mono);
+  color: var(--accent);
+}
+.skill-count {
+  font: 500 11.5px/1.3 var(--mono);
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+.skill-card-title { font: 600 14.5px/1.3 var(--sans); color: var(--ink); }
+.skill-card-desc { font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+
+.skill-flow {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  display: grid;
+  gap: 10px;
+}
+.skill-flow-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.skill-flow-title { font: 600 13.5px/1.35 var(--sans); color: var(--ink); display: flex; align-items: center; gap: 8px; }
+.flow-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 780px) { .flow-steps { grid-template-columns: 1fr; } }
+.flow-step {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.flow-step-num { font: 600 11.5px/1.2 var(--mono); color: var(--accent); text-transform: uppercase; letter-spacing: 0.03em; }
+.flow-step-label { font: 600 13px/1.35 var(--sans); color: var(--ink); }
+.flow-step-tools { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.flow-tool-chip {
+  font: 11.5px/1.35 var(--mono);
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.tools-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.tools-search { flex: 1 1 240px; }
+
+.tool-groups { display: grid; gap: 18px; }
+.tool-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding: 0 2px;
+}
+.tool-group-title {
+  font: 600 12px/1.3 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.tool-list { display: grid; gap: 8px; }
+.tool {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  padding: 12px 15px;
+  transition: border-color .14s ease;
+}
+.tool:hover { border-color: var(--line-strong); }
+.tool[open] { background: var(--surface); border-color: var(--line-strong); }
+.tool > summary {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  color: var(--ink);
+}
+.tool > summary::before { color: var(--muted); }
+.tool-summary-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tool-name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tool-name { font: 600 13.5px/1.35 var(--mono); color: var(--ink); }
+.tool-brief { font: 400 12.5px/1.4 var(--sans); color: var(--muted); }
+.tool-summary-tags { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+
+.skill-pill {
+  font: 500 11.5px/1.3 var(--mono);
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.skill-pill.support {
+  background: var(--surface);
+  color: var(--muted);
+  border-color: var(--line-strong);
+}
+.skill-pill:hover { border-color: var(--accent); color: var(--accent); }
+
+.tool-body {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+}
+.tool-body-desc { margin: 0; font-size: 13px; line-height: 1.55; color: var(--muted); }
+.tool-roles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.param-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.param-table th {
+  text-align: left;
+  font: 600 11.5px/1.3 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.param-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.param-table tr:last-child td { border-bottom: 0; }
+.param-key { font: 600 12.5px/1.4 var(--mono); color: var(--ink); white-space: nowrap; }
+.param-req {
+  display: inline-block;
+  margin-left: 6px;
+  font: 600 10.5px/1.2 var(--sans);
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.param-opt {
+  display: inline-block;
+  margin-left: 6px;
+  font: 500 10.5px/1.2 var(--sans);
+  color: var(--faint);
+}
+.param-type { font: 12px/1.45 var(--mono); color: var(--accent); word-break: break-word; }
+.param-desc { color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+.param-sub { margin-top: 4px; font: 11.5px/1.45 var(--mono); color: var(--faint); }
+
+.tool pre {
+  margin: 8px 0 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font: 12px/1.5 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+
+/* Notices & Toast Feedback */
+.note { font-size: 13.5px; color: var(--muted); margin: 0; }
+.note.bad { color: var(--bad); }
+.note.ok { color: var(--ok); }
+.notice {
+  position: sticky;
+  bottom: 16px;
+  margin-top: 18px;
+  padding: 11px 16px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow);
+  font-weight: 500;
+}
+.notice.ok { border-color: var(--ok); background: var(--ok-soft); color: var(--ok); }
+.notice.bad { border-color: var(--bad); background: var(--bad-soft); color: var(--bad); }
+.aside-note { font-size: 13.5px; color: var(--muted); margin: 0 0 10px; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <div class="rail-top">
+      <div class="brand-wrap">
+        <svg class="brand-logo" viewBox="0 0 64 64" width="34" height="34" fill="none" aria-hidden="true">
+          <rect width="64" height="64" rx="14" fill="#0E5A5E"/>
+          <rect x="12" y="12" width="40" height="40" rx="5" fill="#FAFAF6"/>
+          <path d="M12 17a5 5 0 0 1 5-5h30a5 5 0 0 1 5 5v2H12v-2z" fill="#B42E2E"/>
+          <path d="M23 28h18M23 36h18M23 44h11" stroke="#0E5A5E" stroke-width="2.6" stroke-linecap="round"/>
+          <circle cx="18.5" cy="28" r="2" fill="#0E5A5E"/>
+          <circle cx="18.5" cy="36" r="2" fill="#0E5A5E"/>
+          <circle cx="18.5" cy="44" r="2" fill="#B42E2E"/>
+        </svg>
+        <div class="brand-text">
+          <span class="brand">GPK</span>
+          <span class="brand-sub" id="brand-sub">Goals · Projects · Knowledge</span>
+        </div>
+      </div>
+    </div>
+    <nav id="navigation" aria-label="Service console"></nav>
+    <div class="rail-footer" id="rail-controls"></div>
+  </aside>
+  <main>
+    <div class="page-head">
+      <div>
+        <h1 id="page-title">GPK</h1>
+        <p class="page-sub" id="page-sub"></p>
+      </div>
+      <div id="page-actions"></div>
+    </div>
+    <div id="app"></div>
+    <div id="feedback" aria-live="polite"></div>
+  </main>
+</div>
+<script>
+"use strict";
+
+const TEXT = {
+  en: {
+    title: "Set up GPK",
+    subtitles: {
+      "/console": "Local daemon health, Craft workspace connection and automatic session retention status.",
+      "/config": "Manage your Craft workspace, automatic conversation retention and shared writing preferences.",
+      "/tools": "Interactive visual map of GPK's 6 Skills, the 28 Agent BFF MCP tools they orchestrate, and structured tool parameters.",
+      setup: "Connect Craft and shape your GPK workspace structure in one step.",
+    },
+    connect: name => `Connect ${name}`, connecting: name => `Waiting for ${name} to confirm…`,
+    reopen: "Open the authorization page again",
+    structureTitle: "Shape the structure",
+    structureIntro: name => `Connected to ${name}. GPK creates the structure shown in Your workspace with full workspace access; nothing you already have is changed.`,
+    modeTitle: "Workspace placement", modeHint: "Where GPK puts what it creates.",
+    dedicated: "Dedicated to GPK", dedicatedHint: "Everything at the top level",
+    shared: "Shared with other notes", sharedHint: "Everything inside one folder",
+    langTitle: "Language and time", langHint: "GPK replies in your conversation language. Choose the language for structural names.",
+    metadata: "Workspace names", metadataHint: "Folder, table and view names.",
+    timezone: "Timezone", timezoneHint: tz => `Empty uses the workspace timezone${tz ? ` (${tz})` : ""}`,
+    namesTitle: "Names", namesHint: "Shown in your knowledge base. Edit them freely.",
+    clash: (name, n) => `A folder named "${name}" already exists there (${n} document${n === 1 ? "" : "s"}). Rename this, or`,
+    useIt: "use that folder",
+    existingTitle: "Continue with your GPK workspace",
+    existingIntro: "This space already has a GPK workspace from an earlier setup. Continuing reuses it as it is: nothing new is created.",
+    existingPick: "More than one was found. Choose the one to continue with.",
+    existingCounts: (a, p) => `${a} area${a === 1 ? "" : "s"} · ${p} project${p === 1 ? "" : "s"}`,
+    existingFolders: (s, w, o) => `${s} source${s === 1 ? "" : "s"} · ${w} wiki${w === 1 ? "" : "s"} · ${o} output${o === 1 ? "" : "s"}`,
+    existingNoFolders: "Its folders were not recorded. Name them below; an existing folder of that name can be reused.",
+    resume: "Continue with this workspace", resuming: "Connecting the workspace…",
+    startNew: "Set up a new workspace instead", backToExisting: "Continue with the existing workspace instead",
+    newNote: "This space already has a GPK workspace. A new one is created next to it, leaving the existing one untouched.",
+    adoptedNote: (name, n) => `Using existing "${name}" folder (${n} document${n === 1 ? "" : "s"}).`, undo: "Undo",
+    host: "Home page", areas: "Areas", projects: "Projects", sources: "Sources", wikis: "Wikis", outputs: "Outputs",
+    create: "Create workspace", creating: "Creating workspace…",
+    save: "Save preferences", saved: "Saved.", saving: "Saving…",
+    sessionsTitle: "Automatic session retention",
+    sessionsIntro: "Summarize and retain useful findings from your active Agent harness (Claude Code, Codex, Antigravity) into Craft. One evolving conversation reuses one Source.",
+    sessionsAuto: "Automatically summarize active sessions",
+    sessionsAutoHint: "Triggered via the mounted harness Stop hook when a turn finishes. File read access follows your active harness automatically.",
+    sessionsDepth: "Automatic ingest depth",
+    sessionsDepthOptions: { save: "Capture · Save Source summary", wiki: "Study · Save Source + integrate into Wikis", research: "Deep Research · Multi-source synthesis" },
+    sessionsRetention: "Retain granularity",
+    sessionsRetentionOptions: { summary: "Summary (Recommended)", excerpts: "Key excerpts", full: "Full conversation text" },
+    sessionsInstructions: "Custom retention instructions (optional)",
+    uploadsSummary: "Local image & PDF upload API (optional)",
+    uploadsIntro: "Craft's standard MCP channel handles all text and tables, while binary image/PDF uploads use a Craft API connection. Local file read permissions are governed directly by your Agent harness.",
+    uploadsUrl: "Craft API URL",
+    uploadsUrlHint: "In Craft: Imagine → API → New connection for this space; paste https://connect.craft.do/links/…/api/v1",
+    uploadsKey: "API key (optional)",
+    uploadsConnect: "Connect API", uploadsReplace: "Replace connection", uploadsConnecting: "Verifying…", uploadsDisconnect: "Disconnect",
+    uploadsState: { none: "Not connected", connected: "Connected", "secret-missing": "Keychain secret missing — reconnect" },
+    planTitle: "Your workspace", planEmpty: "Not connected yet",
+    kinds: { page: "home page", table: "collection", folder: "folder", templates: "templates" },
+    templates: "Templates", templatesKind: "Craft Templates",
+    examples: {
+      host: "Start page holding Areas & Projects collections",
+      namespace: "Dedicated parent folder isolating GPK records",
+      areas: "Ongoing responsibilities, e.g. Health, Engineering",
+      projects: "Bounded outcomes with Objective, KRs & Tasks",
+      sources: "Retained articles, papers & AI session notes",
+      wikis: "Maintained explanations synthesized in your words",
+      outputs: "Delivered reports, specs & published artifacts",
+      templates: "Editable GPK Area, Project, Source, Wiki & Output templates",
+    },
+    facts: { metadata: "Names", access: "Access" },
+  },
+  "zh-CN": {
+    title: "设置 GPK",
+    subtitles: {
+      "/console": "查看本机守护进程、Craft 空间连接与会话自动沉淀运行状态。",
+      "/config": "管理 Craft 工作区、会话自动总结开关与跨客户端共享写作偏好。",
+      "/tools": "可视化浏览 GPK 六大技能、28 个 Agent BFF 工具的编排关系及参数结构。",
+      setup: "连接 Craft 并一键完成 GPK 工作区初始化。",
+    },
+    connect: name => `连接 ${name}`, connecting: name => `等待 ${name} 确认授权…`,
+    reopen: "重新打开授权页面",
+    structureTitle: "确定工作区结构",
+    structureIntro: name => `已连接到 ${name}。GPK 将创建右侧「你的工作区」列出的结构并自动开启工作区完整读写权限，不会改动你已有的其他内容。`,
+    modeTitle: "存放方式", modeHint: "GPK 创建的页面与文件夹放在哪里。",
+    dedicated: "专用于 GPK", dedicatedHint: "直接放在空间顶层",
+    shared: "与其他笔记共用", sharedHint: "统一收进一个独立文件夹",
+    langTitle: "语言与时区", langHint: "GPK 默认跟随对话语言交流，此处仅决定新建文件夹和视图的名称语言。",
+    metadata: "结构名称语言", metadataHint: "文件夹、表格和视图名称",
+    timezone: "时区", timezoneHint: tz => `留空则使用空间默认时区${tz ? `（${tz}）` : ""}`,
+    namesTitle: "结构名称", namesHint: "显示在 Craft 中，可随时按习惯调整。",
+    clash: (name, n) => `已存在同名文件夹「${name}」（含 ${n} 篇文档）。请改名，或`,
+    useIt: "直接复用该文件夹",
+    existingTitle: "继续使用已有的 GPK 工作区",
+    existingIntro: "当前空间已有一套 GPK 工作区。继续使用会原样沿用全部领域、项目与知识目录，不重复创建。",
+    existingPick: "检测到多套工作区，请选择要接入的一套：",
+    existingCounts: (a, p) => `${a} 个领域 · ${p} 个项目`,
+    existingFolders: (s, w, o) => `${s} 篇来源 · ${w} 篇知识 · ${o} 篇产出`,
+    existingNoFolders: "未记录旧工作区的文件夹，请在下方确认名称（同名文件夹可直接复用）。",
+    resume: "接入这套工作区", resuming: "正在接入工作区…",
+    startNew: "改为新建一套工作区", backToExisting: "返回选择已有工作区",
+    newNote: "当前空间已有 GPK 工作区。新建结构会并排放置，原有内容保持不动。",
+    adoptedNote: (name, n) => `将复用已有「${name}」文件夹（${n} 篇文档）。`, undo: "取消复用",
+    host: "主页", areas: "领域", projects: "项目", sources: "来源", wikis: "知识", outputs: "产出",
+    create: "一键创建工作区", creating: "正在创建工作区…",
+    save: "保存偏好", saved: "已保存。", saving: "正在保存…",
+    sessionsTitle: "会话自动沉淀",
+    sessionsIntro: "自动将当前所挂载客户端（Claude Code、Codex、Antigravity）对话中有价值的结论、决策与知识总结到 Craft；同一段对话始终增量更新同一篇 Source。",
+    sessionsAuto: "自动总结当前活跃会话",
+    sessionsAutoHint: "在每轮对话结束时由宿主 Stop Hook 触发；是否可读会话由所挂载的客户端决定，无需在 GPK 中重复配置目录。",
+    sessionsDepth: "自动沉淀深度",
+    sessionsDepthOptions: { save: "Capture · 仅存为 Source 摘要", wiki: "Study · 存 Source 并提炼更新 Wiki", research: "Deep Research · 多源深度整合" },
+    sessionsRetention: "保留粒度",
+    sessionsRetentionOptions: { summary: "精炼摘要（推荐）", excerpts: "关键原文摘录", full: "完整对话正文" },
+    sessionsInstructions: "自定义提炼偏好（选填，例如：重点保留架构决策与根因分析）",
+    uploadsSummary: "本地图片与 PDF 原件上传接口（选填）",
+    uploadsIntro: "Craft 的标准 MCP 接口负责全部文本与数据表读写；若还需将本地图片或 PDF 二进制原件上传进 Craft 页面，可在此接入 Craft API 链接（本地文件读取权限直接跟随 Agent 客户端，无需额外目录白名单）。",
+    uploadsUrl: "Craft API 地址",
+    uploadsUrlHint: "在 Craft 中打开 Imagine → API → 为当前空间创建连接，粘贴 https://connect.craft.do/links/…/api/v1",
+    uploadsKey: "API Key（若设置了密钥）",
+    uploadsConnect: "验证并连接", uploadsReplace: "更换连接", uploadsConnecting: "正在验证…", uploadsDisconnect: "断开连接",
+    uploadsState: { none: "未连接（仅文本模式）", connected: "已连接", "secret-missing": "钥匙串凭据缺失，请重连" },
+    planTitle: "你的工作区", planEmpty: "尚未连接",
+    kinds: { page: "主页", table: "数据表", folder: "文件夹", templates: "原生模板" },
+    templates: "实体模板", templatesKind: "Craft 模板区",
+    examples: {
+      host: "工作区入口页，承载领域与项目两张核心表",
+      namespace: "独立总文件夹，与其他个人笔记干净隔离",
+      areas: "长期方向与责任，例如 工程体系、健康、个人成长",
+      projects: "有明确终点的改变，内置 Objective、KR 与任务",
+      sources: "保留出处的论文、网页与 AI 会话总结",
+      wikis: "持续演进、用自己语言维护的主题知识卡片",
+      outputs: "对外交付的方案、文章、报告与复盘成果",
+      templates: "可在 Craft 模板选择器中直接编辑的五类 GPK 模板",
+    },
+    facts: { metadata: "名称语言", access: "工作区权限" },
+  },
+};
+
+// Canonical Skill <-> MCP Tool Architecture Catalog
+const SKILLS_CATALOG = [
+  {
+    id: "gpk",
+    title: ["Router & Lookup", "总路由与直查"],
+    desc: [
+      "Answers GPK method questions, runs direct entity lookups, logs standalone daily outcomes, and routes into the 5 workflow Skills.",
+      "解答 GPK 方法论、直接检索任意实体记录、打卡独立日常成果，并路由至五大专项工作流技能。",
+    ],
+    steps: [
+      { label: ["Inspect & query records", "状态与实体直查"], tools: ["gpk_status", "gpk_projects_get", "gpk_tasks_get", "gpk_sources_get", "gpk_wikis_get"] },
+      { label: ["Check captures & links", "查看收件箱与双向关联"], tools: ["gpk_captures_get", "gpk_areas_get", "gpk_outputs_get", "gpk_links"] },
+      { label: ["Log standalone outcome", "记录独立每日活动"], tools: ["gpk_daily_record"] },
+    ],
+    primary: ["gpk_status", "gpk_daily_record", "gpk_areas_get", "gpk_projects_get", "gpk_tasks_get", "gpk_sources_get", "gpk_wikis_get", "gpk_outputs_get", "gpk_captures_get", "gpk_links"],
+    support: [],
+  },
+  {
+    id: "gpk-setup",
+    title: ["Setup & Preferences", "连接与偏好设置"],
+    desc: [
+      "Checks readiness, opens this local browser console for Craft OAuth & workspace setup, and updates writing preferences or templates.",
+      "检查工作区就绪状态，唤起本地控制台完成 Craft 授权与建表，并更新写作语言、时区及模板绑定。",
+    ],
+    steps: [
+      { label: ["1. Check readiness", "1. 检查就绪与诊断"], tools: ["gpk_status"] },
+      { label: ["2. Open browser setup", "2. 唤起浏览器初始化"], tools: ["gpk_setup_open"] },
+      { label: ["3. Update preferences", "3. 更新偏好与模板"], tools: ["gpk_preferences_update"] },
+    ],
+    primary: ["gpk_status", "gpk_setup_open", "gpk_preferences_update"],
+    support: [],
+  },
+  {
+    id: "gpk-plan",
+    title: ["Goal & Project Planning", "目标与项目规划"],
+    desc: [
+      "Frames bounded Projects with Objective, KRs and ordered initial Tasks under an Area, attaches process materials, and revises plans.",
+      "在长期领域下立项（明确 Objective、KR 与有序初始任务），挂载过程材料，并动态调整计划与归属。",
+    ],
+    steps: [
+      { label: ["1. Check Areas & capacity", "1. 盘点领域与在研项目"], tools: ["gpk_areas_get", "gpk_projects_get"] },
+      { label: ["2. Frame Project & Tasks", "2. 立项并批量创建任务"], tools: ["gpk_areas_create", "gpk_projects_create", "gpk_tasks_create"] },
+      { label: ["3. Reorder & revise plan", "3. 调整排序、材料与归属"], tools: ["gpk_projects_update", "gpk_tasks_update", "gpk_areas_update"] },
+    ],
+    primary: ["gpk_areas_get", "gpk_areas_create", "gpk_areas_update", "gpk_projects_get", "gpk_projects_create", "gpk_projects_update", "gpk_tasks_create", "gpk_tasks_update"],
+    support: ["gpk_sources_create", "gpk_wikis_create", "gpk_outputs_create", "gpk_links"],
+  },
+  {
+    id: "gpk-work",
+    title: ["Daily Execution", "日常执行推进"],
+    desc: [
+      "Picks focused next actions, clarifies Inbox captures into Tasks, transitions Task states/dates, records Outputs, and closes finished Projects.",
+      "挑选当下可执行下一步行动，将收件箱想法澄清为任务，流转状态与排期，归档交付物并结项。",
+    ],
+    steps: [
+      { label: ["1. Pick action or capture", "1. 挑选行动或读取收件箱"], tools: ["gpk_review_inventory", "gpk_captures_get", "gpk_tasks_get"] },
+      { label: ["2. Clarify & advance Task", "2. 澄清创建或流转任务"], tools: ["gpk_tasks_create", "gpk_tasks_update"] },
+      { label: ["3. Record Output & close", "3. 沉淀产出物与项目结项"], tools: ["gpk_outputs_create", "gpk_outputs_update", "gpk_projects_update"] },
+    ],
+    primary: ["gpk_review_inventory", "gpk_captures_get", "gpk_tasks_get", "gpk_tasks_create", "gpk_tasks_update", "gpk_outputs_get", "gpk_outputs_create", "gpk_outputs_update"],
+    support: ["gpk_projects_get", "gpk_projects_update", "gpk_wikis_create", "gpk_wikis_update", "gpk_daily_record"],
+  },
+  {
+    id: "gpk-ingest",
+    title: ["Knowledge & Session Ingest", "资料与会话沉淀"],
+    desc: [
+      "Retains external documents/URLs and Agent conversations as Sources (Capture), synthesizes subject Wikis (Study / Deep Research), and saves checkpoints.",
+      "将外部资料、笔记库与 AI 会话保存为 Source（Capture），提炼演化主题 Wiki（Study / Deep Research），并管理导入断点。",
+    ],
+    steps: [
+      { label: ["1. Deduplicate & orient", "1. 查重与读取已有知识"], tools: ["gpk_sources_get", "gpk_wikis_get"] },
+      { label: ["2. Retain Source / Session", "2. 保存资料或增量读取会话"], tools: ["gpk_sources_create", "gpk_sources_update", "gpk_sessions_next", "gpk_sessions_apply"] },
+      { label: ["3. Synthesize Wiki & link", "3. 提炼更新 Wiki 与断点"], tools: ["gpk_wikis_create", "gpk_wikis_update", "gpk_links", "gpk_checkpoints"] },
+    ],
+    primary: ["gpk_sources_get", "gpk_sources_create", "gpk_sources_update", "gpk_wikis_get", "gpk_wikis_create", "gpk_wikis_update", "gpk_sessions_next", "gpk_sessions_apply", "gpk_checkpoints"],
+    support: ["gpk_projects_get", "gpk_projects_update", "gpk_tasks_create", "gpk_outputs_create", "gpk_links"],
+  },
+  {
+    id: "gpk-review",
+    title: ["Periodic Review", "周期复盘回顾"],
+    desc: [
+      "Runs daily, weekly, monthly or ad-hoc reviews from a single population snapshot, surfaces stalled/held work, and records review decisions.",
+      "一键拉取日/周/月度全景盘点快照，识别停滞项目、逾期与挂起任务，并将确认后的调整写回系统。",
+    ],
+    steps: [
+      { label: ["1. Snapshot population", "1. 一键拉取全景盘点快照"], tools: ["gpk_review_inventory"] },
+      { label: ["2. Expand Projects & Areas", "2. 展开项目细节与领域关联"], tools: ["gpk_projects_get", "gpk_areas_get", "gpk_links", "gpk_wikis_get"] },
+      { label: ["3. Record review decisions", "3. 写回排期、排序与复盘结论"], tools: ["gpk_projects_update", "gpk_tasks_update", "gpk_areas_update", "gpk_daily_record"] },
+    ],
+    primary: ["gpk_review_inventory", "gpk_projects_get", "gpk_projects_update", "gpk_tasks_update", "gpk_areas_get", "gpk_areas_update"],
+    support: ["gpk_tasks_create", "gpk_links", "gpk_wikis_get", "gpk_daily_record"],
+  },
+];
+
+const TOOL_GROUPS = [
+  { id: "system", title: ["System & Setup", "系统与初始化"], tools: ["gpk_status", "gpk_setup_open", "gpk_preferences_update"] },
+  { id: "captures", title: ["Captures & Daily Notes", "收件箱与每日记录"], tools: ["gpk_captures_get", "gpk_daily_record"] },
+  { id: "areas", title: ["Areas", "长期领域 (Area)"], tools: ["gpk_areas_get", "gpk_areas_create", "gpk_areas_update"] },
+  { id: "projects", title: ["Projects & Materials", "项目与过程材料 (Project)"], tools: ["gpk_projects_get", "gpk_projects_create", "gpk_projects_update"] },
+  { id: "tasks", title: ["Tasks", "可执行任务 (Task)"], tools: ["gpk_tasks_get", "gpk_tasks_create", "gpk_tasks_update"] },
+  { id: "sources", title: ["Sources", "资料来源 (Source)"], tools: ["gpk_sources_get", "gpk_sources_create", "gpk_sources_update"] },
+  { id: "wikis", title: ["Wikis", "主题知识 (Wiki)"], tools: ["gpk_wikis_get", "gpk_wikis_create", "gpk_wikis_update"] },
+  { id: "outputs", title: ["Outputs", "交付产出 (Output)"], tools: ["gpk_outputs_get", "gpk_outputs_create", "gpk_outputs_update"] },
+  { id: "review", title: ["Contextual Links & Review", "双向关联与全景复盘"], tools: ["gpk_links", "gpk_review_inventory"] },
+  { id: "sessions", title: ["Sessions & Checkpoints", "会话增量沉淀与断点"], tools: ["gpk_sessions_next", "gpk_sessions_apply", "gpk_checkpoints"] },
+];
+
+const TOOL_BRIEFS = {
+  gpk_status: ["Inspect readiness, backend connection, preferences & custom templates", "查询就绪状态、Craft 连接、用户偏好与自定义模板"],
+  gpk_setup_open: ["Launch the local browser console for OAuth & workspace setup", "唤起本机浏览器控制台完成授权与工作区配置"],
+  gpk_preferences_update: ["Update writing language, timezone, instructions, templates or auto-retention", "更新正文语言、时区、全局指令、模板绑定或自动沉淀开关"],
+  gpk_captures_get: ["List raw captures from Inbox or a dated Daily Note", "读取收件箱 (Inbox) 或指定日期每日笔记中的原始记录"],
+  gpk_daily_record: ["Append an idempotent completed outcome line to the Daily Note", "在当日 Daily Note 中幂等记录一条完成事项或活动摘要"],
+  gpk_areas_get: ["Read or filter Areas of responsibility by ID, text or state", "按 ID、关键词、状态或关联对象查询长期领域"],
+  gpk_areas_create: ["Create a standing Area with initial state, body & links", "创建新的长期领域，支持初始正文、关联与每日打卡"],
+  gpk_areas_update: ["Update Area title, body edits/append, state transition & links", "复合更新领域标题、局部修订/追加、状态流转与双向关联"],
+  gpk_projects_get: ["Read or query Projects and expand area, tasks, materials & links in one call", "查询项目并一键展开所属领域、子任务、过程材料与关联"],
+  gpk_projects_create: ["Frame a Project under an Area with bundled initialTasks, materials & links", "在领域下立项，单次调用一并创建初始任务序列、材料与关联"],
+  gpk_projects_update: ["Compound Project update: body, taskOrder, state transition, materials & links", "复合更新项目正文、任务排序、结项/流转、过程材料与关联"],
+  gpk_tasks_get: ["Read or query Tasks by state, Project ownership, planned date or text", "按状态、所属项目（或独立任务）、计划日期范围与关键词查任务"],
+  gpk_tasks_create: ["Create a single Task or a batch items[] in Daily Note or a Project", "创建单条或批量任务（items[]），落入当日笔记或指定项目"],
+  gpk_tasks_update: ["Update Task title, body, planned date, Project move, state transition & links", "更新任务标题、正文结果、排期日期、跨项目归属与状态流转"],
+  gpk_sources_get: ["Read or search retained Sources by ID, link, text or related record", "按 ID、关键词或关联记录检索已保存的 Source 来源"],
+  gpk_sources_create: ["Save a Source with provenance, optional local attachment & auto Daily Note log", "创建资料来源，支持上传本地原件并自动写入每日记录"],
+  gpk_sources_update: ["Update Source body, attach originalFile, recover interrupted writes & add links", "更新来源正文、挂载本地原件、恢复中断写入或追加关联"],
+  gpk_wikis_get: ["Read or search subject Wikis and detect customized Wiki templates", "按关键词或关联对象检索主题 Wiki 卡片"],
+  gpk_wikis_create: ["Create a synthesized subject Wiki with claim citations & links", "新建带出处引用的主题知识卡片 (Wiki)"],
+  gpk_wikis_update: ["Revise an existing Wiki in place via targeted edits or append", "就地迭代修订已有 Wiki 正文并追加新来源关联"],
+  gpk_outputs_get: ["Read or search delivered Outputs by ID, text or related record", "检索已归档的交付产出物 (Output)"],
+  gpk_outputs_create: ["Record a delivered artifact Output and link its producing Project/Tasks", "归档对外交付的报告、方案或成果，并关联对应项目/任务"],
+  gpk_outputs_update: ["Update an Output's title, body edits/append and contextual links", "更新产出物标题、正文内容与双向关联"],
+  gpk_links: ["Query bidirectional links on a record, or add/remove directed links", "查询记录的双向关联图谱，或新增/移除带语境说明的关联"],
+  gpk_review_inventory: ["One-call daily/weekly/monthly review snapshot with attention signals & gaps", "单次调用获取日/周/月复盘全量盘点、停滞/逾期信号与覆盖率"],
+  gpk_sessions_next: ["Claim and page through the next changed harness conversation transcript", "认领并分页读取下一段有新增对话的客户端会话记录"],
+  gpk_sessions_apply: ["Deterministically retain/update the session Source, Wikis, Tasks & checkpoint", "幂等落库会话 Source 摘要、衍生 Wiki/任务并推进断点进度"],
+  gpk_checkpoints: ["Read or save durable multi-pass import/research checkpoints by key", "按逻辑键读取或保存批量导入与深度研究的持久化断点"],
+};
+
+const PARAM_HINTS = {
+  include: ["Extra diagnostic or nested sections to return in the same call", "单次调用一并展开返回的附加子视图"],
+  view: ["Initial console view to open (setup or console)", "打开浏览器控制台时的默认视图"],
+  preferences: ["User authoring preferences (contentLanguage, timezone, profileWiki, instructions)", "用户写作偏好（新建正文语言、时区、个人画像 Wiki、全局指令）"],
+  templates: ["Backend native template bindings per entity role (null resets to default)", "六类实体的 Craft 原生模板引用绑定（传 null 恢复内置模板）"],
+  automaticIngestionEnabled: ["Turn automatic Stop-hook session summarization on or off", "开启或关闭对话结束时的会话自动总结"],
+  expected: ["Optimistic concurrency version token from the latest read", "最近一次读取返回的乐观锁版本号（防止覆盖外部修改）"],
+  surface: ["Target capture surface: { name: 'inbox' } or { name: 'daily-notes', date? }", "目标采集面：收件箱 inbox 或指定日期的 daily-notes"],
+  refs: ["Specific capture references to read with full nested content", "按引用精确读取指定的收件箱/日志条目及其嵌套块"],
+  summary: ["Single-line factual activity sentence for the Daily Note", "写入当日 Daily Note 的单行客观成果摘要"],
+  related: ["Optional entity reference linked beside the Daily Note entry", "在每日记录旁附带跳转链接的关联实体引用"],
+  date: ["ISO calendar date (YYYY-MM-DD); defaults to today in workspace timezone", "日历日期 YYYY-MM-DD（默认取工作区时区的今天）"],
+  targets: ["Specific entity IDs, Craft block URLs or typed Refs to read directly", "按原生 ID、链接或类型化 Ref 精确读取指定记录"],
+  text: ["Case-insensitive substring search across title and body", "跨标题与正文的大小写不敏感关键词过滤"],
+  relatedTo: ["Filter records linked to/from this entity reference", "仅筛选与指定实体存在双向链接关系的记录"],
+  states: ["Lifecycle states to include in the query", "按生命周期状态列表过滤"],
+  cursor: ["Pagination token or character offset from the previous page", "上一页返回的分页游标或字符偏移量"],
+  limit: ["Maximum items to return per page (1–100)", "单页返回的最大条目数（1–100）"],
+  title: ["Record title or concise Task action line", "记录标题或简明可执行的任务名称"],
+  content: ["Markdown body following the active entity template", "遵循对应实体模板结构的 Markdown 正文"],
+  state: ["Initial lifecycle state of the created entity", "新建实体的初始状态"],
+  links: ["Contextual links ({ to, context }) attached on creation", "创建时一并写入的双向关联（含目标引用与关系语境）"],
+  linksAdd: ["New contextual links ({ to, context }) to append", "追加到记录关联区的带语境双向链接"],
+  activitySummary: ["Optional Daily Note log written atomically in the same call", "在本次写操作完成后顺带记入 Daily Note 的成果摘要"],
+  activityDate: ["Override date (YYYY-MM-DD) for activitySummary", "指定 activitySummary 落入的日志日期"],
+  ref: ["Target entity reference ({ scope, id, kind }) to update", "待更新的目标实体引用 ({ scope, id, kind })"],
+  edits: ["Targeted literal { before, after } replacements within blocks", "按唯一原文片段精确替换正文局部内容 ({ before, after })"],
+  append: ["Trailing Markdown prose appended without matching existing text", "直接在正文末尾追加的新段落内容"],
+  replaceContent: ["Full body replacement for interrupted empty-body recovery (requires expected)", "仅用于修复中断空文档的整篇替换（必须携带 expected 版本号）"],
+  transition: ["Lifecycle state change { state, reason } with explicit rationale", "带原因说明的状态流转 ({ state, reason })"],
+  material: ["Specific Project material reference to read", "单独读取某一篇项目过程材料的引用"],
+  area: ["Filter Projects belonging to this AreaRef", "按所属长期领域过滤项目"],
+  primaryArea: ["Owning AreaRef (on create) or { area, reason } reassignment (on update)", "项目归属的主领域（新建传 AreaRef，变更传 { area, reason }）"],
+  history: ["Historical provenance { origin, date? } required when creating already-closed work", "补录历史已完结项目/任务时必填的来源说明 ({ origin, date? })"],
+  initialTasks: ["Ordered initial Tasks created inside the Project in one call", "立项时按执行顺序一并创建的初始任务列表"],
+  materials: ["Process materials (inline section or child-document) created with the Project", "随项目一并创建的过程材料（行内章节或子页面）"],
+  materialAppend: ["New process materials to attach to the Project", "向已有项目新增挂载的过程材料"],
+  materialUpdate: ["Targeted updates to existing Project materials", "对已有项目过程材料的正文更新"],
+  taskOrder: ["Complete ordered list of open TaskRefs defining Project execution order", "项目内全部未完结任务的完整排序列表"],
+  project: ["Owning ProjectRef (null for standalone Tasks) or { target, reason } move", "任务所属项目（null 表示独立任务；更新时传 { target, reason }）"],
+  time: ["Planned attention date YYYY-MM-DD (or time range filter on get; null clears)", "计划关注/执行日期 YYYY-MM-DD（查询时为日期区间，传 null 清空排期）"],
+  items: ["Batch of up to 50 Tasks to create in one call", "单次批量创建的任务数组（最多 50 条）"],
+  originalFile: ["Local file:/// URL to upload as an original attachment via Craft API", "通过 Craft API 上传挂载的本地原件路径 (file:///...)"],
+  recordInDaily: ["Automatically log 'Saved' in Daily Note (defaults to true)", "是否自动在当日笔记记录已保存该来源（默认 true）"],
+  dailyDate: ["Override Daily Note date when recording the Source", "指定来源打卡写入的 Daily Note 日期"],
+  action: ["Sub-operation discriminator (e.g. query / add / remove, or read / save)", "子操作动作枚举（如 query/add/remove 或 read/save）"],
+  link: ["Single directed link { from, to, context }", "单条有向关联 ({ from, to, context })"],
+  cadence: ["Review horizon: daily, weekly or monthly", "复盘周期：daily（日）、weekly（周）或 monthly（月）"],
+  horizonDays: ["Custom upcoming window in days (0–366)", "自定义未来前瞻天数窗口（0–366 天）"],
+  mode: ["Session discovery mode: manual backfill or automatic Stop-hook pass", "会话读取模式：manual（手动回溯）或 automatic（自动沉淀）"],
+  days: ["Rolling N×24h lookback window over user turn timestamps", "按用户发言时间回溯最近 N 天（滚动 24 小时窗口）"],
+  until: ["ISO timestamp upper bound for session turn selection", "会话轮次筛选的截止时间（ISO 时间戳）"],
+  origin: ["Optional harness reader ID (claude-code, codex, antigravity)", "限定只读取指定客户端来源（如 claude-code、codex、antigravity）"],
+  key: ["Session key (e.g. codex:<id>) or logical checkpoint key (e.g. import/obsidian)", "会话唯一键或持久化断点键名"],
+  token: ["Active lease UUID returned by gpk_sessions_next", "gpk_sessions_next 认领会话后返回的活跃锁令牌"],
+  outcome: ["Session completion action: retain (save), skip (no durable value) or release (unlock)", "会话处理结果：retain（沉淀保存）、skip（跳过无价值轮次）或 release（释放锁）"],
+  reason: ["Concise explanation recorded for the outcome or transition", "本次处理结果或状态变更的原因说明"],
+  source: ["Prepared { title, content } summary to create/update on the session's Source", "待写入或增量更新到该会话专属 Source 的标题与整理正文"],
+  wikis: ["Downstream Wiki create/update actions derived from this session", "从本次会话提炼出的下游 Wiki 新建或修订动作"],
+  tasks: ["Accepted follow-up Tasks extracted from this session", "从本次会话提取并确认的后续待办任务"],
+  reconcile: ["Reconcile previously interrupted pending session effects with verified versions", "中断重连时用于核销已落库下游记录的版本对账列表"],
+};
+
+const DEFAULT_NAMES = {
+  en: { host: "GPK", areas: "Areas", projects: "Projects", sources: "Sources", wikis: "Wikis", outputs: "Outputs" },
+  "zh-CN": { host: "GPK", areas: "领域", projects: "项目", sources: "来源", wikis: "知识", outputs: "产出" },
+};
+const LANGUAGES = [["en", "English"], ["zh-CN", "中文"]];
+
+function readStorage(key) { try { return localStorage.getItem(key); } catch { return null; } }
+function writeStorage(key, val) { try { if (val === null) localStorage.removeItem(key); else localStorage.setItem(key, val); } catch {} }
+
+let lang = readStorage("gpk-ui-lang") || ((navigator.language || "").toLowerCase().startsWith("zh") ? "zh-CN" : "en");
+if (!TEXT[lang]) lang = "en";
+let theme = readStorage("gpk-ui-theme") || "auto";
+function applyTheme() {
+  if (typeof document === "undefined") return;
+  if (theme === "light" || theme === "dark") document.documentElement.setAttribute("data-theme", theme);
+  else document.documentElement.removeAttribute("data-theme");
+}
+
+function normalizePath(pathname) {
+  if (pathname === "/" || pathname === "/sources") return "/config";
+  return pathname;
+}
+
+let currentPath = normalizePath(location.pathname);
+let state = null, serviceCache = null, form = null, note = null, busy = false, namesEdited = false, polling = null, workspaceChosen = false;
+let freshWorkspace = false, resumeId = null, preferencesDraft = null, showApiKey = false, selectedSkill = null;
+
+const tr = (en, cn) => lang === "zh-CN" ? cn : en;
+const bi = pair => pair ? (lang === "zh-CN" ? pair[1] : pair[0]) : "";
+const t = key => TEXT[lang][key];
+
+const SVG_PATHS = {
+  status: ["M2.5 8h2.8l1.7-4.2 2.4 8.4 1.8-4.2h2.3"],
+  config: ["M2.5 4.5h11M2.5 8h11M2.5 11.5h11", "M5.5 3v3M10.5 6.5v3M6.5 10v3"],
+  tools: ["M4.5 5.5L7 8l-2.5 2.5M8.5 10.5h3", "M2.5 3h11a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"],
+  refresh: ["M13.2 8a5.2 5.2 0 1 1-1.3-3.4", "M13.5 2.5v2.6h-2.6"],
+  page: ["M4 1.5h5.5l3 3v10h-8.5z", "M9.5 1.5v3h3", "M6 8h4.5M6 10.5h4.5"],
+  table: ["M2 3h12v10H2z", "M2 6.5h12M6.5 3v10"],
+  folder: ["M1.5 3.5h4.5l1.5 2h7v7.5h-13z"],
+  templates: ["M5 1.5h8v10H5z", "M3 4v10.5h8", "M7 5h4M7 7.5h4"],
+};
+
+function svgIcon(kind, cls = "nav-icon") {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  for (const [k, v] of Object.entries({ viewBox: "0 0 16 16", width: "15", height: "15", class: cls, fill: "none", stroke: "currentColor", "stroke-width": "1.5", "stroke-linejoin": "round", "stroke-linecap": "round", "aria-hidden": "true" })) svg.setAttribute(k, v);
+  for (const d of (SVG_PATHS[kind] || [])) { const p = document.createElementNS(ns, "path"); p.setAttribute("d", d); svg.append(p); }
+  return svg;
+}
+
+function h(tag, props, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(props || {})) {
+    if (value === undefined || value === null || value === false) continue;
+    if (key === "on") for (const [event, fn] of Object.entries(value)) node.addEventListener(event, fn);
+    else if (key === "className" || key === "value" || key === "checked" || key === "disabled" || key === "selected") node[key] = value;
+    else node.setAttribute(key, value === true ? "" : value);
+  }
+  for (const child of children.flat()) if (child !== null && child !== undefined && child !== false) node.append(child instanceof Node ? child : String(child));
+  return node;
+}
+
+function badge(tone, label, withDot = true) {
+  return h("span", { className: `badge ${tone}` }, withDot ? h("span", { className: "dot", "aria-hidden": "true" }) : null, label);
+}
+
+function navTabs() {
+  return [
+    ["/console", tr("Status", "状态"), "status"],
+    ["/config", tr("Configuration", "配置"), "config"],
+    ["/tools", tr("MCP & Skills", "MCP 与技能"), "tools"],
+  ];
+}
+
+function renderChrome() {
+  document.documentElement.lang = lang;
+  document.getElementById("brand-sub").textContent = tr("Local Console", "本地控制台");
+  const tabs = navTabs();
+  const activeTab = tabs.find(([href]) => href === currentPath) || tabs[1];
+  const isOnboarding = currentPath === "/config" && state && state.onboarding !== "complete" && state.settings !== "ready";
+  const heading = isOnboarding ? t("title") : activeTab[1];
+  document.title = heading + " · GPK";
+  document.getElementById("page-title").textContent = heading;
+  document.getElementById("page-sub").textContent = t("subtitles")[isOnboarding ? "setup" : currentPath] || "";
+
+  const toolCount = serviceCache?.tools?.length;
+  document.getElementById("navigation").replaceChildren(...tabs.map(([href, label, iconName]) =>
+    h("a", {
+      href,
+      "aria-current": href === currentPath ? "page" : null,
+      on: {
+        click: event => {
+          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+          event.preventDefault();
+          navigateTo(href);
+        },
+      },
+    }, svgIcon(iconName), h("span", {}, label), href === "/tools" && toolCount ? h("span", { className: "nav-count" }, String(toolCount)) : null)));
+
+  document.getElementById("rail-controls").replaceChildren(
+    h("div", { className: "seg", role: "group", "aria-label": "Language" },
+      ...[["zh-CN", "中文"], ["en", "EN"]].map(([code, label]) =>
+        h("button", { type: "button", "aria-pressed": lang === code ? "true" : "false", on: { click: () => { if (lang === code) return; lang = code; writeStorage("gpk-ui-lang", code); rerenderCurrent(); } } }, label))),
+    h("div", { className: "seg", role: "group", "aria-label": "Theme" },
+      ...[["auto", tr("Auto", "自动")], ["light", "☀"], ["dark", "☾"]].map(([mode, label]) =>
+        h("button", { type: "button", "aria-pressed": theme === mode ? "true" : "false", on: { click: () => { theme = mode; writeStorage("gpk-ui-theme", mode); applyTheme(); renderChrome(); } } }, label))),
+  );
+}
+
+function navigateTo(href) {
+  const target = normalizePath(href);
+  if (currentPath === target) return;
+  currentPath = target;
+  note = null;
+  if (typeof history !== "undefined") history.pushState(null, "", target);
+  rerenderCurrent();
+}
+
+function rerenderCurrent() {
+  renderChrome();
+  if (currentPath === "/console" || currentPath === "/tools") loadServiceView();
+  else if (state) render();
+  else refresh();
+}
+
+async function api(method, path, body) {
+  try {
+    const response = await fetch(path, { method, credentials: "same-origin", headers: body ? { "content-type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
+    if (!response.ok) return { ok: false, error: { message: `HTTP ${response.status}.`, next: tr("Reopen the console with gpk open.", "请在终端重新运行 gpk open 打开新控制台。") } };
+    return await response.json();
+  } catch {
+    return { ok: false, error: { message: tr("GPK service is unreachable.", "无法连接本地 GPK 服务。"), next: tr("Reopen the console with gpk open.", "请在终端运行 gpk open 重新打开控制台。") } };
+  }
+}
+const errorText = result => result.error ? `${result.error.message} ${result.error.next || ""}`.trim() : "";
+
+// Workspace permissions are always enabled in full across all bound GPK containers.
+function missingGrantSelections(proposal = [], granted = [], backendId = "") {
+  const has = (root, scope, op) => granted.some(g => g.root.id === root && g.root.scope === scope && (!backendId || g.backendId === backendId) && g.operations.includes(op));
+  return proposal
+    .map(grant => ({
+      root: grant.root.id,
+      operations: grant.operations.filter(op => !has(grant.root.id, grant.root.scope, op)),
+    }))
+    .filter(entry => entry.operations.length > 0);
+}
+
+let syncingPermissions = false;
+async function ensureFullPermissions(snapshot) {
+  if (!snapshot || snapshot.settings !== "ready" || !Array.isArray(snapshot.proposal) || syncingPermissions) return false;
+  const missing = missingGrantSelections(snapshot.proposal, snapshot.granted || [], snapshot.backend?.id || "");
+  if (!missing.length) return false;
+  syncingPermissions = true;
+  const res = await api("POST", "/api/grants", { grants: missing });
+  syncingPermissions = false;
+  if (res.ok) {
+    snapshot.granted = snapshot.proposal.map(g => ({ ...g }));
+    snapshot.onboarding = "complete";
+    snapshot.grants = snapshot.proposal.length;
+    return true;
+  }
+  return false;
+}
+
+let verifyingCraft = null, inspectingLayout = false;
+
+async function verifyCraftInBackground() {
+  if (verifyingCraft) return verifyingCraft;
+  verifyingCraft = (async () => {
+    const rt = await api("GET", "/api/runtime");
+    verifyingCraft = null;
+    if (!rt.ok || !rt.value.connection) return;
+    if (state) state.connection = rt.value.connection;
+    if (currentPath === "/console") {
+      const badgeSlot = document.getElementById("status-craft-badge");
+      const nameSlot = document.getElementById("status-craft-name");
+      if (badgeSlot) badgeSlot.replaceWith(Object.assign(authorizationBadge(rt.value.connection), { id: "status-craft-badge" }));
+      if (nameSlot) nameSlot.textContent = rt.value.connection?.space?.name || tr("Not connected", "尚未连接");
+    } else if (currentPath === "/config" && state) {
+      render();
+    }
+  })();
+  return verifyingCraft;
+}
+
+async function refresh(deep = false) {
+  const fullInspect = deep === true;
+  if (fullInspect) { inspectingLayout = true; if (state) render(); }
+  renderChrome();
+  const prevLayout = state?.layout;
+  const prevSpace = state?.connection?.space;
+  const [stateRes, svcRes] = await Promise.all([
+    api("GET", fullInspect ? "/api/state" : "/api/local"),
+    serviceCache ? Promise.resolve({ ok: true, value: serviceCache }) : api("GET", "/api/service"),
+  ]);
+  inspectingLayout = false;
+  if (svcRes.ok) serviceCache = svcRes.value;
+  if (!stateRes.ok) { note = { kind: "bad", text: errorText(stateRes) }; render(); return; }
+  state = stateRes.value;
+  if (!fullInspect && prevLayout && !state.layout) state.layout = prevLayout;
+  if (!fullInspect && prevSpace && state.connection && !state.connection.space) {
+    state.connection.space = prevSpace;
+    state.connection.tokens = "verified";
+  }
+  await ensureFullPermissions(state);
+  if (!form) form = { workspace: "dedicated", metadataLanguage: lang === "zh-CN" ? "zh-CN" : "en", timezone: "", names: { ...DEFAULT_NAMES[lang === "zh-CN" ? "zh-CN" : "en"] }, adopt: {} };
+  if (!workspaceChosen && state.layout) form.workspace = looksDedicated() ? "dedicated" : "shared";
+  const waiting = state.connection && state.connection.pendingAuthorizationUrl && state.connection.tokens !== "verified";
+  clearTimeout(polling);
+  if (waiting) polling = setTimeout(() => refresh(false), 2000);
+  renderChrome();
+  render();
+  if (!fullInspect) {
+    if (state.settings !== "ready" && state.connection?.tokens && state.connection.tokens !== "none") {
+      void refresh(true);
+    } else if (state.connection?.tokens === "stored") {
+      void verifyCraftInBackground();
+    }
+  }
+}
+
+function looksDedicated() {
+  const c = (state && state.layout && state.layout.candidates) || { folders: [], collections: [] };
+  return c.folders.filter(f => f.parentId === null && f.name !== "How to use Craft").length === 0;
+}
+const backendName = () => "Craft";
+const panel = (...children) => h("section", { className: "panel" }, ...children);
+function rows(entries) {
+  return h("dl", { className: "rows" }, entries.map(([key, ...values]) =>
+    h("div", {}, h("dt", {}, key), h("dd", {}, ...(values.length ? values : ["—"])))));
+}
+function authorizationBadge(connection = {}) {
+  if (connection.authorizationError) return badge("bad", connection.authorizationError);
+  if (connection.pendingAuthorizationUrl) return badge("warn", tr("Awaiting browser approval", "等待浏览器确认授权"));
+  if (connection.tokens === "verified") return badge("ok", tr("Verified", "已验证"));
+  if (connection.tokens === "stored") return badge("warn", tr("Stored · verifying", "已保存凭据 · 待验证"));
+  return badge("neutral", tr("Disconnected", "未连接"), false);
+}
+
+function render() {
+  const app = document.getElementById("app");
+  const actions = document.getElementById("page-actions");
+  const feedback = document.getElementById("feedback");
+  actions.replaceChildren(h("button", { type: "button", className: "secondary", on: { click: () => refresh(false) } }, svgIcon("refresh"), tr("Refresh", "刷新")));
+  feedback.replaceChildren(...(note ? [h("p", { className: "notice " + note.kind, role: note.kind === "bad" ? "alert" : "status" }, note.text)] : []));
+  if (!state) {
+    app.replaceChildren(panel(note
+      ? h("button", { type: "button", className: "secondary", on: { click: () => refresh(false) } }, tr("Retry", "重试"))
+      : h("p", { className: "muted" }, tr("Loading workspace…", "正在读取工作区状态…"))));
+    return;
+  }
+
+  const built = state.settings === "ready";
+  const connected = state.connection?.tokens === "verified";
+
+  // Onboarding mode: two-column layout with live workspace card on the right
+  if (!built) {
+    const left = h("div", { className: "stack" },
+      panel(h("div", { className: "panel-head" }, h("h2", {}, tr("1. Connect Craft", "1. 连接 Craft")), authorizationBadge(state.connection)),
+        connected
+          ? rows([[tr("Craft space", "Craft 空间"), h("strong", {}, state.connection.space?.name || "Craft")]])
+          : connectView()),
+      connected && state.layout
+        ? panel(...structureView())
+        : panel(h("h2", {}, tr("2. Shape the structure", "2. 确定工作区结构")), h("p", { className: "muted" }, connected
+            ? tr("Inspecting Craft space…", "正在读取 Craft 空间结构…")
+            : tr("Connect Craft above to create or reuse a GPK workspace.", "完成上方 Craft 授权连接后，即可新建或复用工作区。"))),
+    );
+    app.replaceChildren(h("div", { className: "onboard-grid" }, left, planCard()));
+    return;
+  }
+
+  // Streamlined Configuration Center:
+  // 1. Craft connection & workspace (+ optional attachment upload API)
+  // 2. Automatic session retention (switch + granularity/depth, zero folder ACLs)
+  // 3. Writing & time preferences
+  const files = state.files || { uploads: "none" };
+  const uploadsConnected = files.uploads === "connected";
+  const stack = h("div", { className: "stack" },
+    panel(
+      h("div", { className: "panel-head" },
+        h("div", {}, h("h2", {}, tr("Craft connection & workspace", "Craft 连接与工作区")), h("p", { className: "panel-sub" }, tr("Active knowledge backend bound to this local control root, with full workspace read/write access enabled.", "当前绑定的 Craft 知识库空间，已默认开启工作区完整读写权限（绝不执行删除操作）。"))),
+        authorizationBadge(state.connection)),
+      rows([
+        [tr("Workspace", "所属空间"), h("strong", {}, state.connection?.space?.name || (state.connection?.tokens === "stored" ? tr("Verifying with Craft…", "正在向 Craft 验证…") : "—"))],
+        [t("metadata"), h("span", { className: "mono-chip" }, state.preferences?.metadataLanguage || "en")],
+        [tr("Workspace access", "工作区读写权限"), state.onboarding === "complete"
+          ? badge("ok", tr("All enabled", "全部已开启"))
+          : badge("warn", tr("Syncing…", "同步权限中…"))],
+      ]),
+      state.layout?.locations?.length
+        ? h("details", { className: "fold", open: true },
+            h("summary", {}, tr("Bound collections & folders", "已绑定的数据表与文件夹")),
+            rows(state.layout.locations.map(loc => [t(loc.role + "s") || loc.role, h("span", {}, loc.detail || loc.ref.id, " ", loc.status === "ok" ? badge("ok", tr("Ready", "正常"), false) : badge("bad", loc.status, false))])))
+        : h("div", { style: "margin-top:12px" },
+            h("button", { type: "button", className: "linkish", disabled: inspectingLayout, on: { click: () => refresh(true) } },
+              inspectingLayout ? tr("Inspecting Craft containers…", "正在向 Craft 检查容器状态…") : tr("Inspect bound collections & folders in Craft →", "向 Craft 检查已绑定的数据表与文件夹状态 →"))),
+      h("details", { className: "fold divider", open: files.uploads === "secret-missing" },
+        h("summary", {}, t("uploadsSummary"), " ", badge(uploadsConnected ? "ok" : files.uploads === "secret-missing" ? "bad" : "neutral", t("uploadsState")[files.uploads], uploadsConnected)),
+        uploadsSection()),
+    ),
+    panel(conversationsView()),
+    panel(...preferencesView()),
+  );
+  app.replaceChildren(stack);
+}
+
+function actionRow(label, busyLabel, onClick) {
+  return h("div", { className: "actions" },
+    h("button", { className: "primary", type: "button", disabled: busy, on: { click: onClick } }, busy ? busyLabel : label));
+}
+
+function safeExternalUrl(raw) {
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.toString() : null;
+  } catch { return null; }
+}
+
+function connectView() {
+  const connection = state.connection || {};
+  const waiting = safeExternalUrl(connection.pendingAuthorizationUrl);
+  return h("div", {},
+    h("p", { className: "panel-sub" }, tr("Authorize GPK's own OAuth client in your browser. Credentials are stored in macOS Keychain.", "在浏览器中授权连接 Craft 空间，访问令牌将安全保存在系统钥匙串中。")),
+    waiting ? h("p", { className: "note", style: "margin-top:10px" }, t("connecting")(backendName()), " · ", h("a", { href: waiting }, t("reopen"))) : null,
+    actionRow(t("connect")(backendName()), t("connecting")(backendName()), async () => {
+      busy = true; note = null; render();
+      const result = await api("POST", "/api/authorize", { backend: "craft" });
+      busy = false;
+      if (!result.ok) { note = { kind: "bad", text: errorText(result) }; render(); return; }
+      const authUrl = safeExternalUrl(result.value.authorizationUrl);
+      if (authUrl) { location.href = authUrl; return; }
+      refresh();
+    }));
+}
+
+function selectLang(id, key, onChange) {
+  return h("select", { id, on: { change: event => { form[key] = event.target.value; if (onChange) onChange(); render(); } } },
+    LANGUAGES.map(([value, label]) => h("option", { value, selected: form[key] === value }, label)));
+}
+
+function existingFolder(key) {
+  if (!["sources", "wikis", "outputs"].includes(key)) return null;
+  const folders = ((state.layout || {}).candidates || {}).folders || [];
+  const name = (form.names[key] || "").trim();
+  let parent = null;
+  if (form.workspace === "shared") {
+    const namespace = folders.find(f => f.parentId === null && f.name === (form.names.host || "").trim());
+    if (!namespace) return null;
+    parent = namespace.id;
+  }
+  return folders.find(f => f.parentId === parent && f.name === name) || null;
+}
+
+function builtName(location) { const m = /"([^"]+)"/.exec(location.detail || ""); return m ? m[1] : ""; }
+
+function nameField(key) {
+  const status = h("span", { className: "clash-slot", id: `clash-${key}` });
+  const fill = () => {
+    const now = existingFolder(key);
+    if (!now || form.adopt[key] !== now.id) delete form.adopt[key];
+    const isAdopted = now && form.adopt[key] === now.id;
+    status.replaceChildren(!now ? "" : isAdopted
+      ? h("span", { className: "clash adopted", role: "status" }, t("adoptedNote")(now.name, now.documents), h("button", { type: "button", on: { click: () => { delete form.adopt[key]; fill(); } } }, t("undo")))
+      : h("span", { className: "clash", role: "status" }, t("clash")(now.name, now.documents), h("button", { type: "button", on: { click: () => { form.adopt[key] = now.id; fill(); } } }, t("useIt"))));
+  };
+  fill();
+  return h("div", { className: "field" }, h("label", { for: `name-${key}` }, t(key)),
+    h("input", { type: "text", id: `name-${key}`, value: form.names[key], maxlength: "80", "aria-describedby": `clash-${key}`, on: { input: event => { form.names[key] = event.target.value; namesEdited = true; fill(); renderPlan(); } } }),
+    status);
+}
+
+async function establishWithFullAccess(payload) {
+  busy = true; note = null; render();
+  const result = await api("POST", "/api/establish", payload);
+  if (!result.ok) {
+    busy = false;
+    note = { kind: "bad", text: errorText(result) };
+    render();
+    return;
+  }
+  form.adopt = {};
+  const access = await api("GET", "/api/access");
+  if (access.ok && Array.isArray(access.value.proposal)) {
+    const allGrants = access.value.proposal.map(g => ({ root: g.root.id, operations: g.operations }));
+    await api("POST", "/api/grants", { grants: allGrants });
+  }
+  busy = false;
+  note = { kind: "ok", text: tr("Workspace ready.", "工作区已就绪。") };
+  await refresh(false);
+}
+
+function resumeView(existing) {
+  const space = (state.connection || {}).space || {};
+  if (!existing.some(entry => entry.home.id === resumeId)) resumeId = existing[0].home.id;
+  const chosen = existing.find(entry => entry.home.id === resumeId);
+  form.names = { ...form.names, host: chosen.home.title || form.names.host, areas: chosen.areas.name || form.names.areas, projects: chosen.projects.name || form.names.projects,
+    ...(chosen.folders ? { sources: chosen.folders.source.name, wikis: chosen.folders.wiki.name, outputs: chosen.folders.output.name } : {}) };
+  form.workspace = chosen.namespace ? "shared" : "dedicated";
+  if (chosen.metadataLanguage) form.metadataLanguage = chosen.metadataLanguage;
+  const card = entry => h("button", { type: "button", className: "option", "aria-pressed": entry.home.id === resumeId ? "true" : "false", on: { click: () => { resumeId = entry.home.id; form.adopt = {}; render(); } } },
+    h("strong", {}, entry.home.title || "GPK"),
+    h("span", {}, t("existingCounts")(entry.areas.items, entry.projects.items)),
+    entry.folders ? h("span", {}, t("existingFolders")(entry.folders.source.documents, entry.folders.wiki.documents, entry.folders.output.documents)) : null);
+  return [
+    h("h2", {}, t("existingTitle")), h("p", { className: "intro" }, t("existingIntro")),
+    existing.length > 1 ? h("p", { className: "aside-note" }, t("existingPick")) : null,
+    h("div", { className: "existing" }, existing.map(card)),
+    chosen.folders ? null : h("div", { className: "group" }, h("p", {}, t("existingNoFolders")),
+      h("div", { className: "fields" }, ["sources", "wikis", "outputs"].map(nameField))),
+    h("div", { className: "group" }, h("div", { className: "fields" },
+      h("div", { className: "field" }, h("label", { for: "timezone" }, t("timezone")),
+        h("input", { type: "text", id: "timezone", autocorrect: "off", autocapitalize: "none", spellcheck: "false", value: form.timezone, placeholder: space.timezone || "", on: { input: event => { form.timezone = event.target.value; } } }),
+        h("small", {}, t("timezoneHint")(space.timezone))))),
+    actionRow(t("resume"), t("resuming"), () => establishWithFullAccess({ ...form, timezone: form.timezone.trim() || null, resume: resumeId })),
+    h("p", { style: "margin:14px 0 0" }, h("button", { type: "button", className: "linkish", on: { click: () => { freshWorkspace = true; form.adopt = {}; form.names = { ...DEFAULT_NAMES[form.metadataLanguage] }; if (!workspaceChosen) form.workspace = looksDedicated() ? "dedicated" : "shared"; note = null; render(); } } }, t("startNew"))),
+  ];
+}
+
+function structureView() {
+  const existing = (state.layout || {}).existing || [];
+  if (existing.length && !freshWorkspace) return resumeView(existing);
+  const space = (state.connection || {}).space || {};
+  const mode = (value, label, hint) => h("button", { type: "button", className: "option", "aria-pressed": form.workspace === value ? "true" : "false", on: { click: () => { form.workspace = value; workspaceChosen = true; form.adopt = {}; render(); } } },
+    h("strong", {}, label), h("span", {}, hint));
+  return [
+    h("h2", {}, "2. " + t("structureTitle")), h("p", { className: "intro" }, t("structureIntro")(space.name || backendName())),
+    existing.length ? h("p", { className: "aside-note" }, t("newNote"), " ", h("button", { type: "button", className: "linkish", on: { click: () => { freshWorkspace = false; note = null; render(); } } }, t("backToExisting"))) : null,
+    h("div", { className: "group" }, h("h3", {}, t("modeTitle")), h("p", {}, t("modeHint")),
+      h("div", { className: "options" }, mode("dedicated", t("dedicated"), t("dedicatedHint")), mode("shared", t("shared"), t("sharedHint")))),
+    h("div", { className: "group" }, h("h3", {}, t("langTitle")), h("p", {}, t("langHint")),
+      h("div", { className: "fields" },
+        h("div", { className: "field" }, h("label", { for: "metadata" }, t("metadata")), selectLang("metadata", "metadataLanguage", () => { if (!namesEdited) form.names = { ...DEFAULT_NAMES[form.metadataLanguage] }; }), h("small", {}, t("metadataHint"))),
+        h("div", { className: "field" }, h("label", { for: "timezone" }, t("timezone")),
+          h("input", { type: "text", id: "timezone", autocorrect: "off", autocapitalize: "none", spellcheck: "false", value: form.timezone, placeholder: space.timezone || "", on: { input: event => { form.timezone = event.target.value; } } }),
+          h("small", {}, t("timezoneHint")(space.timezone))))),
+    h("div", { className: "group" }, h("h3", {}, t("namesTitle")), h("p", {}, t("namesHint")),
+      h("div", { className: "fields" }, ["host", "areas", "projects", "sources", "wikis", "outputs"].map(nameField))),
+    actionRow(t("create"), t("creating"), () => {
+      workspaceChosen = true;
+      return establishWithFullAccess({ ...form, timezone: form.timezone.trim() || null });
+    }),
+  ];
+}
+
+// ---------- Optional Craft Upload API (Inside Craft Connection Card) ----------
+const filesForm = { url: "", key: "" };
+let filesBusy = false, filesNote = null;
+
+async function filesCall(body) {
+  filesBusy = true; filesNote = null; render();
+  const result = await api("POST", "/api/uploads", body);
+  filesBusy = false;
+  if (result.ok) { state.files = result.value; filesForm.url = ""; filesForm.key = ""; filesNote = { kind: "ok", text: t("saved") }; }
+  else filesNote = { kind: "bad", text: errorText(result) };
+  render();
+}
+
+function uploadsSection() {
+  const files = state.files || { uploads: "none" };
+  const connected = files.uploads === "connected";
+  return h("div", { style: "margin-top:12px" },
+    h("p", { className: "panel-sub", style: "margin-bottom:12px" }, t("uploadsIntro")),
+    h("div", { className: "fields" },
+      h("div", { className: "field" },
+        h("label", { for: "uploads-url" }, t("uploadsUrl")),
+        h("input", { type: "url", id: "uploads-url", autocomplete: "off", autocorrect: "off", autocapitalize: "none", spellcheck: "false", placeholder: "https://connect.craft.do/links/.../api/v1", value: filesForm.url, on: { input: event => { filesForm.url = event.target.value; } } }),
+        h("small", {}, t("uploadsUrlHint"))),
+      h("div", { className: "field" },
+        h("label", { for: "uploads-key" }, t("uploadsKey")),
+        h("div", { className: "pw-wrap" },
+          h("input", { type: showApiKey ? "text" : "password", id: "uploads-key", autocomplete: "off", autocorrect: "off", autocapitalize: "none", spellcheck: "false", value: filesForm.key, on: { input: event => { filesForm.key = event.target.value; } } }),
+          h("button", { type: "button", className: "pw-toggle", "aria-pressed": showApiKey ? "true" : "false", on: { click: () => { showApiKey = !showApiKey; render(); } } }, showApiKey ? tr("Hide", "隐藏") : tr("Show", "显示"))))),
+    h("div", { className: "actions" },
+      h("button", { className: "secondary", type: "button", disabled: filesBusy, on: { click: () => filesCall({ url: filesForm.url, key: filesForm.key || null }) } },
+        filesBusy ? t("uploadsConnecting") : connected ? t("uploadsReplace") : t("uploadsConnect")),
+      files.uploads !== "none" ? h("button", { type: "button", className: "linkish danger", disabled: filesBusy, on: { click: () => filesCall({ disconnect: true }) } }, t("uploadsDisconnect")) : null,
+      filesNote ? h("p", { className: `note ${filesNote.kind}`, role: "alert" }, filesNote.text) : null));
+}
+
+// ---------- Automatic Session Retention (Streamlined in Configuration) ----------
+let sessionDraft = null, conversationBusy = false, conversationNote = null;
+
+function readSessionDefaults(ingestion) {
+  const first = (ingestion?.origins || [])[0] || {};
+  return {
+    enabled: Boolean(ingestion?.enabled),
+    retention: ingestion?.retention || first.retention || "summary",
+    depth: ingestion?.depth || first.depth || "save",
+    instructions: ingestion?.instructions ?? first.instructions ?? "",
+  };
+}
+
+async function saveSessionPolicy(patch) {
+  if (!sessionDraft) sessionDraft = readSessionDefaults(state.ingestion);
+  Object.assign(sessionDraft, patch);
+  conversationBusy = true; conversationNote = null; render();
+  const result = await api("POST", "/api/ingestion", {
+    enabled: sessionDraft.enabled,
+    retention: sessionDraft.retention,
+    depth: sessionDraft.depth,
+    instructions: sessionDraft.instructions,
+  });
+  conversationBusy = false;
+  if (result.ok) {
+    state.ingestion = result.value;
+    sessionDraft = readSessionDefaults(result.value);
+    conversationNote = { kind: "ok", text: t("saved") };
+  } else {
+    conversationNote = { kind: "bad", text: errorText(result) };
+  }
+  render();
+}
+
+function conversationsView() {
+  const saved = readSessionDefaults(state.ingestion);
+  if (!sessionDraft) sessionDraft = { ...saved };
+  const edit = sessionDraft;
+
+  return h("div", {},
+    h("div", { className: "panel-head" },
+      h("div", {},
+        h("h2", {}, t("sessionsTitle")),
+        h("p", { className: "panel-sub" }, t("sessionsIntro"))),
+      saved.enabled ? badge("ok", tr("Enabled", "已开启")) : badge("neutral", tr("Off", "未开启"), false)),
+    h("label", { className: `toggle-banner ${edit.enabled ? "active" : ""}`, for: "auto-sessions-switch" },
+      h("div", { className: "toggle-banner-text" },
+        h("strong", {}, t("sessionsAuto")),
+        h("span", {}, t("sessionsAutoHint"))),
+      h("input", {
+        id: "auto-sessions-switch",
+        type: "checkbox",
+        switch: "",
+        role: "switch",
+        className: "switch",
+        disabled: conversationBusy,
+        checked: edit.enabled,
+        on: { change: event => { void saveSessionPolicy({ enabled: event.target.checked }); } },
+      })),
+    h("div", { className: "fields", style: "margin-top:14px" },
+      h("div", { className: "field" },
+        h("label", { for: "session-retention" }, t("sessionsRetention")),
+        h("select", { id: "session-retention", disabled: conversationBusy, on: { change: event => { void saveSessionPolicy({ retention: event.target.value }); } } },
+          ...Object.entries(t("sessionsRetentionOptions")).map(([value, label]) => h("option", { value, selected: edit.retention === value }, label)))),
+      h("div", { className: "field" },
+        h("label", { for: "session-depth" }, t("sessionsDepth")),
+        h("select", { id: "session-depth", disabled: conversationBusy, on: { change: event => { void saveSessionPolicy({ depth: event.target.value }); } } },
+          ...Object.entries(t("sessionsDepthOptions")).map(([value, label]) => h("option", { value, selected: edit.depth === value }, label))))),
+    h("details", { className: "fold", open: Boolean(edit.instructions.trim()) },
+      h("summary", {}, t("sessionsInstructions")),
+      h("div", { style: "margin-top:10px" },
+        h("textarea", { id: "session-instructions", rows: "2", value: edit.instructions, on: { input: event => { edit.instructions = event.target.value; } } }),
+        h("div", { className: "actions", style: "margin-top:10px" },
+          h("button", { type: "button", className: "secondary", disabled: conversationBusy, on: { click: () => { void saveSessionPolicy({ instructions: edit.instructions }); } } },
+            conversationBusy ? t("saving") : tr("Save instructions", "保存自定义要求"))))),
+    conversationNote ? h("p", { className: `note ${conversationNote.kind}`, style: "margin-top:10px", role: "status" }, conversationNote.text) : null);
+}
+
+function preferencesView() {
+  const prefs = state.preferences || {};
+  if (!preferencesDraft) preferencesDraft = { contentLanguage: prefs.contentLanguage || "", timezone: prefs.timezone || "", instructions: prefs.instructions || "", expected: state.settingsVersion };
+  const edit = preferencesDraft;
+  const space = state.connection?.space || {};
+  const contentLangOptions = [["", tr("Follow conversation & current record", "跟随对话与当前记录语言")], ["en", "English"], ["zh-CN", "简体中文"]];
+  if (edit.contentLanguage && !contentLangOptions.some(([v]) => v === edit.contentLanguage)) contentLangOptions.push([edit.contentLanguage, edit.contentLanguage]);
+  return [
+    h("div", { className: "panel-head" },
+      h("div", {}, h("h2", {}, tr("Writing & time preferences", "写作语言与偏好设置")), h("p", { className: "panel-sub" }, tr("Default authoring rules shared across Claude Code, Codex and Antigravity.", "在 Claude Code、Codex 与 Antigravity 之间共享的新建正文语言、时区和全局指令。")))),
+    h("div", { className: "fields" },
+      h("div", { className: "field" },
+        h("label", { for: "ready-content-lang" }, tr("Content language", "新建正文写作语言")),
+        h("select", { id: "ready-content-lang", on: { change: event => { edit.contentLanguage = event.target.value; } } },
+          ...contentLangOptions.map(([value, label]) => h("option", { value, selected: edit.contentLanguage === value }, label))),
+        h("small", {}, tr("Applies to newly authored documents; original titles and quotes stay intact.", "控制新撰写文档的正文语言，原文标题与引文保持不变。"))),
+      h("div", { className: "field" },
+        h("label", { for: "ready-timezone" }, t("timezone")),
+        h("input", { type: "text", id: "ready-timezone", autocorrect: "off", autocapitalize: "none", spellcheck: "false", value: edit.timezone, placeholder: space.timezone || "Asia/Shanghai", on: { input: event => { edit.timezone = event.target.value; } } }),
+        h("small", {}, t("timezoneHint")(space.timezone))),
+      h("div", { className: "field full" },
+        h("label", { for: "instructions" }, tr("Agent instructions", "Agent 全局工作偏好")),
+        h("textarea", { id: "instructions", rows: 3, placeholder: tr("e.g. Keep task summaries concise; cite papers by author and year.", "例如：任务结果保持简明要点；整理技术资料时优先补充权衡对比。"), value: edit.instructions, on: { input: e => { edit.instructions = e.target.value; } } }))),
+    actionRow(t("save"), t("saving"), async () => {
+      busy = true; note = null; render();
+      const result = await api("POST", "/api/preferences", { contentLanguage: edit.contentLanguage.trim() || null, timezone: edit.timezone.trim() || null, instructions: edit.instructions, expected: edit.expected });
+      if (result.ok || result.error?.code === "conflict") preferencesDraft = null;
+      busy = false;
+      note = result.ok || /nothing|no change|actually changes/i.test(errorText(result)) ? { kind: "ok", text: t("saved") } : { kind: "bad", text: errorText(result) };
+      refresh();
+    }),
+  ];
+}
+
+// ---------- Signature Workspace Preview Card ----------
+function planCard() { return h("aside", { className: "card", id: "plan", "aria-label": t("planTitle") }, planContent()); }
+function renderPlan() { const card = document.getElementById("plan"); if (card) card.replaceChildren(...planContent()); }
+
+function planContent() {
+  const connected = (state.connection || {}).tokens === "verified";
+  const space = (state.connection || {}).space;
+  const built = state.settings === "ready";
+  const locations = (state.layout || {}).locations || [];
+  const status = role => { if (!built) return "planned"; const l = locations.find(x => x.role === role); return l && l.status === "ok" ? "built" : "issue"; };
+  const name = (role, key) => { if (built) { const l = locations.find(x => x.role === role); if (l && builtName(l)) return builtName(l); } return (form && form.names[key]) || DEFAULT_NAMES[lang === "zh-CN" ? "zh-CN" : "en"][key]; };
+  const entry = (label, kind, role, exampleKey, kindLabel) => {
+    const s = role ? status(role) : built ? "built" : "planned";
+    return h("div", { className: `entry ${s}` },
+      h("span", { className: "mark", "aria-hidden": "true" }, s === "built" ? "✓" : s === "issue" ? "!" : "○"),
+      svgIcon(kind === "templates" ? "templates" : kind, "icon"),
+      h("span", { className: "name" }, label),
+      h("span", { className: "kind" }, kindLabel || TEXT[lang].kinds[kind]),
+      h("span", { className: "example" }, TEXT[lang].examples[exampleKey]));
+  };
+  const items = [
+    h("li", { className: "home" },
+      entry(name("host", "host"), "page", null, "host"),
+      h("ul", {},
+        h("li", {}, entry(name("area", "areas"), "table", "area", "areas")),
+        h("li", {}, entry(name("project", "projects"), "table", "project", "projects")))),
+    h("li", {}, entry(name("source", "sources"), "folder", "source", "sources")),
+    h("li", {}, entry(name("wiki", "wikis"), "folder", "wiki", "wikis")),
+    h("li", {}, entry(name("output", "outputs"), "folder", "output", "outputs")),
+  ];
+  const shared = built ? locations.some(l => /in "/.test(l.detail || "")) : (form && form.workspace === "shared");
+  const tree = shared
+    ? h("ul", { className: "tree" }, h("li", {}, entry(name("host", "host"), "folder", null, "namespace"), h("ul", {}, ...items)),
+        h("li", { className: "templates" }, entry(t("templates"), "templates", null, "templates", t("templatesKind"))))
+    : h("ul", { className: "tree" }, ...items, h("li", { className: "templates" }, entry(t("templates"), "templates", null, "templates", t("templatesKind"))));
+  const meta = built ? (state.preferences || {}).metadataLanguage : form && form.metadataLanguage;
+  return [
+    h("h2", {}, t("planTitle")),
+    h("p", { className: "who" }, connected ? (space && space.name) || backendName() : t("planEmpty")),
+    tree,
+    h("dl", { className: "facts" },
+      h("dt", {}, t("facts").metadata), h("dd", {}, LANGUAGES.find(([k]) => k === meta)?.[1] || meta || "—"),
+      h("dt", {}, t("facts").access), h("dd", {}, tr("Full workspace read/write", "工作区完整读写"))),
+  ];
+}
+
+// ---------- Skill <-> MCP Visual Explorer & Structured Parameter Inspector ----------
+function summarizeSchemaType(prop) {
+  if (!prop || typeof prop !== "object") return { type: "any", detail: "" };
+  if (prop.const !== undefined) return { type: JSON.stringify(prop.const), detail: "" };
+  if (Array.isArray(prop.enum)) return { type: prop.enum.map(v => JSON.stringify(v)).join(" | "), detail: "" };
+  const variants = prop.anyOf || prop.oneOf;
+  if (Array.isArray(variants)) {
+    const parts = variants.map(v => summarizeSchemaType(v).type);
+    return { type: [...new Set(parts)].join(" | "), detail: "" };
+  }
+  if (prop.type === "array") {
+    const item = summarizeSchemaType(prop.items || {});
+    const bounds = (prop.minItems !== undefined || prop.maxItems !== undefined)
+      ? ` [${prop.minItems ?? 0}..${prop.maxItems ?? "∞"}]`
+      : "";
+    return { type: `array<${item.type}>${bounds}`, detail: item.detail };
+  }
+  if (prop.type === "object" && prop.properties) {
+    const keys = Object.keys(prop.properties);
+    const req = new Set(prop.required || []);
+    if (keys.includes("scope") && keys.includes("id") && keys.includes("kind") && prop.properties.kind?.const) {
+      return { type: `${prop.properties.kind.const}Ref`, detail: "{ scope, id, kind }" };
+    }
+    if (keys.includes("scope") && keys.includes("id") && keys.includes("kind")) {
+      return { type: "EntityRef", detail: "{ scope, id, kind }" };
+    }
+    const shape = keys.map(k => `${k}${req.has(k) ? "" : "?"}`).join(", ");
+    return { type: "object", detail: `{ ${shape} }` };
+  }
+  const base = Array.isArray(prop.type) ? prop.type.join(" | ") : (prop.type || "object");
+  const fmt = prop.format ? ` (${prop.format})` : "";
+  return { type: `${base}${fmt}`, detail: "" };
+}
+
+function extractSchemaParams(inputSchema) {
+  const props = inputSchema?.properties || {};
+  const required = new Set(inputSchema?.required || []);
+  return Object.entries(props).map(([name, spec]) => {
+    const { type, detail } = summarizeSchemaType(spec);
+    return {
+      name,
+      required: required.has(name),
+      type,
+      detail,
+      hint: bi(PARAM_HINTS[name]) || spec?.description || "",
+    };
+  });
+}
+
+function skillsTouchingTool(toolName) {
+  const primary = SKILLS_CATALOG.filter(s => s.primary.includes(toolName));
+  const support = SKILLS_CATALOG.filter(s => s.support.includes(toolName));
+  return { primary, support };
+}
+
+function toolsView(tools) {
+  let activeFilter = "all";
+  const search = h("input", { id: "tool-search", className: "tools-search", type: "search", autocorrect: "off", autocapitalize: "none", spellcheck: "false", placeholder: tr("Search tool name, parameter or Skill…", "搜索工具名称、参数或关联技能…"), "aria-label": tr("Search tools", "搜索工具") });
+  const filterGroup = h("div", { className: "seg", role: "group", "aria-label": tr("Operation type", "操作类型") });
+  const skillGridSlot = h("div", { className: "skills-grid" });
+  const skillFlowSlot = h("div", {});
+  const groupsSlot = h("div", { className: "tool-groups" });
+
+  function selectSkill(skillId) {
+    selectedSkill = selectedSkill === skillId ? null : skillId;
+    renderExplorer();
+  }
+
+  function renderExplorer() {
+    // 1. Render 6 Skill Cards
+    skillGridSlot.replaceChildren(...SKILLS_CATALOG.map(skill => {
+      const totalTools = new Set([...skill.primary, ...skill.support]).size;
+      const isSelected = selectedSkill === skill.id;
+      return h("button", {
+        type: "button",
+        className: "skill-card",
+        "aria-pressed": isSelected ? "true" : "false",
+        on: { click: () => selectSkill(skill.id) },
+      },
+        h("div", { className: "skill-card-top" },
+          h("span", { className: "skill-id" }, skill.id),
+          h("span", { className: "skill-count" }, `${totalTools} ${tr("tools", "个工具")}`)),
+        h("div", { className: "skill-card-title" }, bi(skill.title)),
+        h("div", { className: "skill-card-desc" }, bi(skill.desc)));
+    }));
+
+    // 2. Render Active Skill Orchestration Flow
+    const activeSkillObj = SKILLS_CATALOG.find(s => s.id === selectedSkill);
+    if (activeSkillObj) {
+      skillFlowSlot.replaceChildren(
+        h("div", { className: "skill-flow" },
+          h("div", { className: "skill-flow-head" },
+            h("div", { className: "skill-flow-title" },
+              badge("accent", activeSkillObj.id, false),
+              h("span", {}, bi(activeSkillObj.title) + " · " + tr("Tool Orchestration Pipeline", "工具编排链路"))),
+            h("button", { type: "button", className: "linkish", on: { click: () => selectSkill(null) } },
+              tr("Show all 28 tools ×", "显示全部 28 个工具 ×"))),
+          h("div", { className: "flow-steps" },
+            ...activeSkillObj.steps.map(step =>
+              h("div", { className: "flow-step" },
+                h("div", { className: "flow-step-label" }, bi(step.label)),
+                h("div", { className: "flow-step-tools" }, ...step.tools.map(tn => h("span", { className: "flow-tool-chip" }, tn))))))));
+    } else {
+      skillFlowSlot.replaceChildren();
+    }
+
+    // 3. Filter Tools
+    const q = search.value.trim().toLowerCase();
+    const skillScopedTools = activeSkillObj
+      ? tools.filter(t => activeSkillObj.primary.includes(t.name) || activeSkillObj.support.includes(t.name))
+      : tools;
+    const readCount = skillScopedTools.filter(tool => tool.annotations?.readOnlyHint).length;
+    const writeCount = skillScopedTools.length - readCount;
+
+    filterGroup.replaceChildren(...[
+      ["all", `${tr("All", "全部")} (${skillScopedTools.length})`],
+      ["read", `${tr("Read", "只读")} (${readCount})`],
+      ["write", `${tr("Write", "写入")} (${writeCount})`],
+    ].map(([val, label]) => h("button", { type: "button", "aria-pressed": activeFilter === val ? "true" : "false", on: { click: () => { activeFilter = val; renderExplorer(); } } }, label)));
+
+    const matching = skillScopedTools.filter(tool => {
+      const ro = Boolean(tool.annotations?.readOnlyHint);
+      if (activeFilter === "read" && !ro) return false;
+      if (activeFilter === "write" && ro) return false;
+      if (!q) return true;
+      const brief = bi(TOOL_BRIEFS[tool.name]) || "";
+      const paramNames = Object.keys(tool.inputSchema?.properties || {}).join(" ");
+      const skillsText = [...skillsTouchingTool(tool.name).primary, ...skillsTouchingTool(tool.name).support].map(s => s.id).join(" ");
+      return `${tool.name} ${brief} ${tool.description || ""} ${paramNames} ${skillsText}`.toLowerCase().includes(q);
+    });
+
+    if (!matching.length) {
+      groupsSlot.replaceChildren(h("p", { className: "muted", style: "padding:12px 2px" }, tr("No matching MCP tools.", "没有匹配的 MCP 工具。")));
+      return;
+    }
+
+    const byName = new Map(matching.map(tool => [tool.name, tool]));
+    const renderedNames = new Set();
+    const sections = [];
+
+    for (const group of TOOL_GROUPS) {
+      const groupTools = group.tools.map(n => byName.get(n)).filter(Boolean);
+      if (!groupTools.length) continue;
+      groupTools.forEach(t => renderedNames.add(t.name));
+      sections.push(renderToolGroup(bi(group.title), groupTools));
+    }
+    const uncategorized = matching.filter(t => !renderedNames.has(t.name));
+    if (uncategorized.length) sections.push(renderToolGroup(tr("Other Tools", "其他工具"), uncategorized));
+    groupsSlot.replaceChildren(...sections);
+  }
+
+  function renderToolGroup(groupTitle, groupTools) {
+    return h("div", {},
+      h("div", { className: "tool-group-head" },
+        h("span", { className: "tool-group-title" }, groupTitle),
+        h("span", { className: "muted", style: "font-size:12px" }, `${groupTools.length}`)),
+      h("div", { className: "tool-list" }, ...groupTools.map(renderToolCard)));
+  }
+
+  function renderToolCard(tool) {
+    const ro = Boolean(tool.annotations?.readOnlyHint);
+    const { primary, support } = skillsTouchingTool(tool.name);
+    const params = extractSchemaParams(tool.inputSchema);
+    const brief = bi(TOOL_BRIEFS[tool.name]) || tool.description || "";
+
+    const skillPills = [
+      ...primary.map(s => h("button", {
+        type: "button",
+        className: "skill-pill",
+        title: tr("Core tool in ", "核心调用技能：") + s.id,
+        on: { click: event => { event.preventDefault(); event.stopPropagation(); selectSkill(s.id); } },
+      }, s.id)),
+      ...support.slice(0, 2).map(s => h("button", {
+        type: "button",
+        className: "skill-pill support",
+        title: tr("Supporting tool in ", "协同调用技能：") + s.id,
+        on: { click: event => { event.preventDefault(); event.stopPropagation(); selectSkill(s.id); } },
+      }, s.id)),
+    ];
+
+    return h("details", { className: "tool" },
+      h("summary", {},
+        h("div", { className: "tool-summary-main" },
+          h("div", { className: "tool-name-row" }, h("span", { className: "tool-name" }, tool.name)),
+          h("span", { className: "tool-brief" }, brief)),
+        h("div", { className: "tool-summary-tags" },
+          ...skillPills,
+          badge(ro ? "neutral" : "warn", ro ? tr("Read", "只读") : tr("Write", "写入"), false))),
+      h("div", { className: "tool-body" },
+        h("p", { className: "tool-body-desc" }, tool.description || ""),
+        (primary.length || support.length)
+          ? h("div", { className: "tool-roles" },
+              primary.length ? h("span", {}, h("strong", {}, tr("Core Skills: ", "核心编排技能：")), ...primary.map(s => h("button", { type: "button", className: "skill-pill", style: "margin-right:5px", on: { click: () => selectSkill(s.id) } }, s.id))) : null,
+              support.length ? h("span", {}, h("strong", {}, tr("Supporting Skills: ", "按需协同技能：")), ...support.map(s => h("button", { type: "button", className: "skill-pill support", style: "margin-right:5px", on: { click: () => selectSkill(s.id) } }, s.id))) : null)
+          : null,
+        params.length
+          ? h("table", { className: "param-table" },
+              h("thead", {}, h("tr", {},
+                h("th", {}, tr("Parameter", "参数名称")),
+                h("th", {}, tr("Type & Values", "类型与约束")),
+                h("th", {}, tr("Description", "参数说明")))),
+              h("tbody", {}, ...params.map(p =>
+                h("tr", {},
+                  h("td", {},
+                    h("span", { className: "param-key" }, p.name),
+                    p.required
+                      ? h("span", { className: "param-req" }, tr("Required", "必填"))
+                      : h("span", { className: "param-opt" }, tr("Optional", "可选"))),
+                  h("td", {},
+                    h("div", { className: "param-type" }, p.type),
+                    p.detail ? h("div", { className: "param-sub" }, p.detail) : null),
+                  h("td", { className: "param-desc" }, p.hint || "—")))))
+          : h("p", { className: "muted" }, tr("This tool takes an empty object {}.", "该工具无需传入必填参数（传空对象 {} 即可）。")),
+        h("details", { className: "fold" },
+          h("summary", {}, tr("View raw JSON Schema", "查看原始 JSON Schema")),
+          h("pre", {}, JSON.stringify(tool.inputSchema, null, 2)))));
+  }
+
+  search.addEventListener("input", renderExplorer);
+  renderExplorer();
+
+  return h("div", { className: "stack" },
+    panel(
+      h("div", { className: "panel-head" },
+        h("div", {},
+          h("h2", {}, tr("Workflow Skills ↔ MCP Orchestration", "六大技能与 MCP 工具编排关系")),
+          h("p", { className: "panel-sub" }, tr("Click any Skill card to inspect its workflow pipeline and filter the MCP tools it calls.", "点击任意 Skill 卡片，即可展开该技能的调用链路并筛选对应的 MCP 工具。"))),
+        badge("neutral", `${SKILLS_CATALOG.length} Skills · ${tools.length} Tools`, false)),
+      skillGridSlot,
+      skillFlowSlot),
+    panel(
+      h("search", { className: "tools-bar" }, search, filterGroup),
+      groupsSlot));
+}
+
+// ---------- Status & Tools Loader ----------
+async function loadServiceView(forceService = false) {
+  const app = document.getElementById("app");
+  const actions = document.getElementById("page-actions");
+  const feedback = document.getElementById("feedback");
+  feedback.replaceChildren();
+  actions.replaceChildren(h("button", { type: "button", className: "secondary", on: { click: () => loadServiceView(true) } }, svgIcon("refresh"), tr("Refresh", "刷新")));
+
+  if (currentPath === "/tools") {
+    if (serviceCache && !forceService) {
+      app.replaceChildren(toolsView(serviceCache.tools));
+      return;
+    }
+    const service = await api("GET", "/api/service");
+    if (service.ok) { serviceCache = service.value; renderChrome(); }
+    app.replaceChildren(service.ok ? toolsView(service.value.tools) : panel(h("p", { role: "alert", className: "note bad" }, errorText(service))));
+    return;
+  }
+
+  const [service, local] = await Promise.all([
+    serviceCache && !forceService ? Promise.resolve({ ok: true, value: serviceCache }) : api("GET", "/api/service"),
+    api("GET", "/api/local"),
+  ]);
+  if (service.ok) { serviceCache = service.value; renderChrome(); }
+  const blocks = [];
+
+  if (service.ok && local.ok) {
+    const sv = service.value;
+    const lv = local.value;
+    await ensureFullPermissions(lv);
+    if (state?.connection?.space && lv.connection && !lv.connection.space) {
+      lv.connection.space = state.connection.space;
+      lv.connection.tokens = "verified";
+    }
+    state = { ...state, ...lv };
+    const copyBtn = h("button", {
+      type: "button",
+      className: "linkish",
+      title: tr("Copy MCP endpoint", "复制 MCP 地址"),
+      on: {
+        click: async e => {
+          try { await navigator.clipboard.writeText(sv.endpoint); e.currentTarget.textContent = tr("Copied", "已复制"); setTimeout(() => { e.currentTarget.textContent = tr("Copy", "复制"); }, 1400); } catch {}
+        },
+      },
+    }, tr("Copy", "复制"));
+
+    const craftBadge = authorizationBadge(lv.connection);
+    craftBadge.id = "status-craft-badge";
+    const spaceLabel = lv.connection?.space?.name
+      || (lv.connection?.tokens === "stored" ? tr("Verifying…", "正在连接验证…") : tr("Not connected", "尚未连接"));
+
+    blocks.push(h("div", { className: "stats" },
+      h("div", { className: "stat" },
+        h("div", { className: "stat-top" }, h("span", { className: "stat-label" }, tr("Local daemon", "本地守护进程")), badge("ok", tr("Running", "运行中"))),
+        h("div", { className: "stat-value" }, "v" + sv.version),
+        h("div", { className: "stat-meta" }, h("span", { className: "mono-chip" }, "PID " + sv.pid))),
+      h("div", { className: "stat" },
+        h("div", { className: "stat-top" }, h("span", { className: "stat-label" }, tr("Craft workspace", "Craft 空间")), craftBadge),
+        h("div", { className: "stat-value", id: "status-craft-name" }, spaceLabel),
+        h("div", { className: "stat-meta" }, lv.onboarding === "complete" ? tr("Workspace ready · full access", "工作区已就绪 · 读写权限已全开") : tr("Setup required", "待完成初始化"))),
+      h("div", { className: "stat" },
+        h("div", { className: "stat-top" }, h("span", { className: "stat-label" }, tr("MCP & Skills", "MCP 与技能")),
+          h("a", { href: "/tools", className: "badge accent", on: { click: e => { e.preventDefault(); navigateTo("/tools"); } } }, `6 Skills · ${sv.tools.length} Tools`)),
+        h("div", { className: "stat-meta", style: "margin-top:auto" }, h("span", { className: "mono-chip" }, sv.endpoint), copyBtn)),
+    ));
+  } else if (!service.ok) {
+    blocks.push(panel(h("p", { role: "alert", className: "note bad" }, errorText(service))));
+  }
+
+  if (local.ok) {
+    const value = local.value;
+    const detailRows = [
+      [tr("Control folder", "本地控制目录"), h("span", { className: "mono-chip" }, value.controlRoot)],
+      [tr("Onboarding", "初始化状态"), value.onboarding === "complete" ? badge("ok", tr("Complete", "已完成")) : badge("warn", tr("Required", "待完成"))],
+    ];
+    if (value.settings === "ready") {
+      detailRows.push([
+        tr("Workspace permissions", "工作区读写权限"),
+        value.onboarding === "complete"
+          ? badge("ok", tr("All enabled", "全部已开启"))
+          : badge("warn", tr("Syncing…", "同步权限中…")),
+      ]);
+      const autoIngest = value.ingestion;
+      detailRows.push([
+        tr("Automatic session retention", "会话自动沉淀"),
+        autoIngest?.enabled
+          ? badge("ok", tr("Enabled", "已开启"))
+          : badge("neutral", tr("Off", "未开启"), false),
+        h("button", { type: "button", className: "linkish", on: { click: () => navigateTo("/config") } }, tr("Configure →", "前往配置 →")),
+      ]);
+    }
+    blocks.push(panel(
+      h("div", { className: "panel-head" },
+        h("div", {}, h("h2", {}, tr("Instance overview", "实例与配置概览")), h("p", { className: "panel-sub" }, tr("Shared by Claude Code, Codex and Antigravity pointing at this control folder.", "指向该控制目录的 Claude Code、Codex 与 Antigravity 共享同一套工作区与配置。"))),
+        h("button", { type: "button", className: "secondary", on: { click: () => navigateTo("/config") } }, tr("Open Configuration", "打开配置"))),
+      rows(detailRows),
+    ));
+    if (value.connection?.tokens === "stored") void verifyCraftInBackground();
+  } else {
+    blocks.push(panel(h("p", { role: "alert", className: "note bad" }, errorText(local))));
+  }
+
+  app.replaceChildren(h("div", { className: "stack" }, ...blocks));
+}
+
+function startConsole() {
+  applyTheme();
+  if (typeof window !== "undefined") {
+    window.addEventListener("popstate", () => {
+      currentPath = normalizePath(location.pathname);
+      note = null;
+      rerenderCurrent();
+    });
+  }
+  renderChrome();
+  if (currentPath === "/console" || currentPath === "/tools") loadServiceView();
+  else refresh();
+}
+
+startConsole();
+</script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+interface:
+  display_name: "GPK Ingest"
+  short_description: "Capture, study or research source material"
+  default_prompt: "Use $gpk-ingest to ingest this material. Ask which depth I want if I have not specified one."
+policy:
+  allow_implicit_invocation: true
